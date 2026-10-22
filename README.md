@@ -1,6 +1,6 @@
 # Gudotopia - Java Swing gardening game
 
-Plain Java 17+ / Swing / Java2D. No libraries, no build tool. All art is drawn in code.
+Plain Java 17+ / Swing / Java2D. No libraries, no build tool.
 
 ## Run in IntelliJ IDEA
 1. File > Open... > choose this `Gudotopia` folder (create a project from existing sources if asked).
