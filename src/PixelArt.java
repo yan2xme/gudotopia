@@ -191,6 +191,41 @@ public final class PixelArt {
         });
     }
 
+
+    /** A little sack in the fertilizer's colour (inventory / HUD icon). */
+    public static BufferedImage fertilizerBag(Fertilizer f) {
+        return cached("fert_" + f.id, k -> {
+            BufferedImage img = canvas(16, 16);
+            Graphics2D g = pixelG(img);
+            oval(g, DARK, 1, 4, 14, 12);
+            oval(g, f.color, 2, 5, 12, 10);
+            rect(g, f.color.brighter(), 4, 7, 3, 3);
+            rect(g, DARK, 5, 2, 6, 4);
+            rect(g, new Color(0xE8D9B0), 6, 3, 4, 2);
+            rect(g, Color.WHITE, 5, 10, 6, 3);                 // label
+            rect(g, G, 7, 10, 2, 3);
+            g.dispose();
+            return img;
+        });
+    }
+
+    /** The flower head tinted brown/grey - shown (blinking) when a ripe flower is about to die. */
+    public static BufferedImage wiltedHead(Flower f) {
+        return cached("wilt_" + f.id, k -> {
+            BufferedImage src = head(f), out = canvas(src.getWidth(), src.getHeight());
+            for (int y = 0; y < src.getHeight(); y++)
+                for (int x = 0; x < src.getWidth(); x++) {
+                    int argb = src.getRGB(x, y), a = argb >>> 24;
+                    if (a == 0) continue;
+                    int r = ((argb >> 16) & 255) * 45 / 100 + 0x7A * 55 / 100;
+                    int gr = ((argb >> 8) & 255) * 45 / 100 + 0x5C * 55 / 100;
+                    int b = (argb & 255) * 45 / 100 + 0x3A * 55 / 100;
+                    out.setRGB(x, y, (a << 24) | (r << 16) | (gr << 8) | b);
+                }
+            return out;
+        });
+    }
+
     // ------------------------------------------------------------------ main-menu characters (original art)
     public static BufferedImage farmer() {
         return cached("farmer", k -> {

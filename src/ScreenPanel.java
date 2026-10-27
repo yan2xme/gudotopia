@@ -23,7 +23,7 @@ public abstract class ScreenPanel extends JPanel {
         });
         addHierarchyListener(ev -> {
             if ((ev.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) != 0) {
-                if (isShowing()) timer.start(); else timer.stop();
+                if (isShowing()) { timer.start(); onShown(); } else timer.stop();
             }
         });
     }
@@ -35,6 +35,9 @@ public abstract class ScreenPanel extends JPanel {
     }
 
     protected void onTick(long dtMs) { }
+
+    /** Called each time this screen becomes visible (e.g. to reset a text field or refresh a list). */
+    protected void onShown() { }
 
     @Override protected final void paintComponent(Graphics g0) {
         Graphics2D g = (Graphics2D) g0.create();

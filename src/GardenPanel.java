@@ -7,19 +7,27 @@ import java.util.Iterator;
 import java.util.List;
 
 /**
- * The gameplay screen: isometric garden, shop on the right, money at the bottom.
- * Handles mouse clicks on individual plots and forwards the rules to PlayerData.
+ * The gameplay screen: isometric garden, shop on the right, money/inventory at the bottom.
+ * Handles clicks on individual plots and forwards the rules to PlayerData; saving goes through GameFrame -> SaveManager.
+ *
+ * How a click on a plot behaves:
+ *   - a fully grown flower      -> harvest it (always)
+ *   - WATER tool is on          -> water the (empty) plot
+ *   - a FERTILIZER is selected  -> apply it to the plot
+ *   - no tool                   -> plant a random seed on an empty watered plot
  */
 public class GardenPanel extends ScreenPanel {
-    private static final long AUTOSAVE_MS = 15_000;
+    private enum Tool { NONE, WATER, FERTILIZER }
 
     private final GameFrame frame;
     private final PlayerData data;
     private final PixelButton back;
     private final ShopPanel shop;
     private final SeedDialog seedDialog;
+    private final FertilizerDialog fertilizerDialog;
 
-    private boolean fertilizerMode;
+    private Tool tool = Tool.NONE;
+    private Fertilizer activeFertilizer;
     private int hoverR = -1, hoverC = -1;
     private String toastText = "";
     private boolean toastError;
@@ -38,9 +46,12 @@ public class GardenPanel extends ScreenPanel {
         this.data = data;
 
         back = new PixelButton("BACK", () -> { autosave(); frame.showMenu(); });
-        shop = new ShopPanel(this::toggleFertilizer, this::openSeeds, this::buyLargerPlot, frame::showCollection);
+        shop = new ShopPanel(this::openFertilizer, this::openSeeds, this::buyLargerPlot,
+                this::toggleWater, frame::showCollection, this::manualSave);
         seedDialog = new SeedDialog(this, data);
-        add(seedDialog);   // added first => painted on top of everything else
+        fertilizerDialog = new FertilizerDialog(this, data);
+        add(seedDialog);        // dialogs are added first => painted on top of everything else
+        add(fertilizerDialog);
         add(back);
         add(shop);
 
@@ -56,26 +67,38 @@ public class GardenPanel extends ScreenPanel {
         addMouseListener(m);
         addMouseMotionListener(m);
 
-        // ESC cancels fertilizer mode / closes the seed shop
+        // ESC closes a shop window, otherwise puts the current tool away
         getInputMap(WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "cancel");
         getActionMap().put("cancel", new AbstractAction() {
             @Override public void actionPerformed(ActionEvent e) {
-                if (seedDialog.isVisible()) seedDialog.setVisible(false); else fertilizerMode = false;
+                if (seedDialog.isVisible()) seedDialog.setVisible(false);
+                else if (fertilizerDialog.isVisible()) fertilizerDialog.setVisible(false);
+                else dropTool();
             }
         });
+
+        // Time that passed while this save was closed may already have killed flowers: tell the player.
+        data.update();
+        handleEvents(data.drainEvents());
     }
 
-    // ------------------------------------------------------------------ actions
-    private void openSeeds() { fertilizerMode = false; seedDialog.open(); }
+    // ------------------------------------------------------------------ tools & shop buttons
+    private void dropTool() { tool = Tool.NONE; activeFertilizer = null; }
 
-    private void toggleFertilizer() {
-        if (fertilizerMode) { fertilizerMode = false; return; }
-        if (data.getMoney() < PlayerData.FERTILIZER_COST) { toast("Not enough money! Fertilizer costs $" + PlayerData.FERTILIZER_COST + ".", true); return; }
-        boolean anyGrowing = false;
-        for (int r = 0; r < data.getGardenSize(); r++)
-            for (int c = 0; c < data.getGardenSize(); c++) if (!data.getPlot(r, c).isEmpty() && !data.getPlot(r, c).isMature()) anyGrowing = true;
-        if (!anyGrowing) { toast("Plant a seed first - fertilizer only works on growing plants.", true); return; }
-        fertilizerMode = true;
+    private void toggleWater() {
+        boolean wasOn = tool == Tool.WATER;
+        dropTool();
+        if (!wasOn) tool = Tool.WATER;
+    }
+
+    private void openSeeds() { dropTool(); seedDialog.open(); }
+    private void openFertilizer() { fertilizerDialog.open(); }
+
+    /** Called by the fertilizer shop when the player clicks a fertilizer in their stock. */
+    public void selectFertilizer(Fertilizer f) {
+        tool = Tool.FERTILIZER;
+        activeFertilizer = f;
+        toast("Using " + f.name + ". Click a watered empty plot or a growing plant.", false);
     }
 
     private void buyLargerPlot() {
@@ -84,34 +107,62 @@ public class GardenPanel extends ScreenPanel {
         if (r.ok) autosave();
     }
 
+    private void manualSave() {
+        if (frame.saveGame()) toast("Game saved to \"" + data.getSaveName() + "\"!", false);
+        else toast("Could not save: " + frame.getLastSaveError(), true);
+    }
+
+    // ------------------------------------------------------------------ clicking plots
     private void clickCell(int r, int c) {
+        data.update();                                    // flowers may have just died or ripened
+        handleEvents(data.drainEvents());
         GardenPlot p = data.getPlot(r, c);
-        PlayerData.Result res;
+        PlayerData.Result res = null;
         if (p.isMature()) {
             res = data.harvest(r, c);
             if (res.ok) addFloater("+$" + res.amount, r, c, res.newDiscovery ? new Color(0xFFD23F) : new Color(0x7CFF7C));
-        } else if (fertilizerMode) {
-            res = data.fertilize(r, c);
-            if (!res.ok && data.getMoney() < PlayerData.FERTILIZER_COST) fertilizerMode = false;
+        } else if (tool == Tool.WATER) {
+            res = data.water(r, c);
+        } else if (tool == Tool.FERTILIZER) {
+            res = data.applyFertilizer(r, c, activeFertilizer);
         } else if (p.isEmpty()) {
             res = data.plant(r, c);
         } else {
-            res = null;
-            toast(p.getFlower().name + " is still growing - " + (p.remainingMs() / 1000 + 1) + "s left. Use FERTILIZER to speed it up.", true);
+            toast(p.getFlower().name + " is still growing - " + (p.remainingMs() / 1000 + 1) + "s left. Fertilizer makes it faster!", true);
         }
         if (res != null) {
             toast(res.message, !res.ok);
-            if (res.ok) autosave();
+            if (res.ok) autosave();                       // every important action is written to the database
         }
+    }
+
+    /** Tells the player about flowers that ripened or died by themselves. */
+    private void handleEvents(List<PlayerData.PlotEvent> events) {
+        int died = 0;
+        PlayerData.PlotEvent lastDied = null, lastRipe = null;
+        for (PlayerData.PlotEvent e : events) {
+            if (e.type == GardenPlot.Event.DIED) {
+                died++; lastDied = e;
+                if (getWidth() > 0) addFloater("withered!", e.row, e.col, new Color(0xFF6B6B));
+            } else lastRipe = e;
+        }
+        if (died > 1) toast(died + " flowers withered because they were not harvested in time!", true);
+        else if (died == 1) toast("Your " + lastDied.flowerName + " withered - it was not harvested in time! No reward. Water the soil again to replant.", true);
+        else if (lastRipe != null) toast(lastRipe.flowerName + " is ready! Harvest it within " + GameConfig.DEATH_MS / 1000 + " seconds.", false);
+        if (died > 0) autosave();                         // store the reset plots right away
     }
 
     public void toast(String text, boolean error) {
         toastText = text;
         toastError = error;
-        toastUntil = System.currentTimeMillis() + 3200;
+        toastUntil = System.currentTimeMillis() + 3600;
     }
 
-    public void autosave() { frame.saveGame(); sinceSave = 0; }
+    /** Writes the game to SQLite (through GameFrame). A failed save is shown, never ignored. */
+    public void autosave() {
+        sinceSave = 0;
+        if (!frame.saveGame()) toast("Could not save: " + frame.getLastSaveError(), true);
+    }
 
     private void addFloater(String text, int r, int c, Color color) {
         computeGeometry();
@@ -123,15 +174,20 @@ public class GardenPanel extends ScreenPanel {
     }
 
     @Override protected void onTick(long dtMs) {
-        data.update(dtMs);                               // plants grow (real elapsed time, never blocks the UI)
-        shop.refresh(data, fertilizerMode);
+        data.update();                                    // plants grow from real timestamps (never blocks the UI)
+        handleEvents(data.drainEvents());
+        if (tool == Tool.FERTILIZER && (activeFertilizer == null || data.getFertilizers().count(activeFertilizer) == 0)) {
+            if (activeFertilizer != null) toast("You used up your last " + activeFertilizer.name + ".", false);
+            dropTool();
+        }
+        shop.refresh(data, tool == Tool.WATER, tool == Tool.FERTILIZER);
         for (Iterator<Floater> it = floaters.iterator(); it.hasNext(); ) {
             Floater f = it.next();
             f.age += dtMs / 1000.0;
             if (f.age > 1.4) it.remove();
         }
         sinceSave += dtMs;
-        if (sinceSave > AUTOSAVE_MS) autosave();
+        if (sinceSave > GameConfig.AUTOSAVE_MS) autosave();
     }
 
     // ------------------------------------------------------------------ geometry
@@ -165,9 +221,10 @@ public class GardenPanel extends ScreenPanel {
     @Override public void doLayout() {
         int w = getWidth(), h = getHeight();
         seedDialog.setBounds(0, 0, w, h);
+        fertilizerDialog.setBounds(0, 0, w, h);
         back.setBounds(16, 16, (int) (w * 0.17) + 4, (int) (h * 0.10) + 4);
         int sw = shopWidth();
-        shop.setBounds(w - sw - (int) (w * 0.03), (int) (h * 0.08), sw, (int) (h * 0.68));
+        shop.setBounds(w - sw - (int) (w * 0.03), (int) (h * 0.07), sw, (int) (h * 0.80));
     }
 
     private static Polygon diamond(double cx, double cy, double hw, double hh) {
@@ -178,6 +235,7 @@ public class GardenPanel extends ScreenPanel {
     @Override protected void paintScreen(Graphics2D g, int w, int h) {
         GameRenderer.hills(g, w, h);
         computeGeometry();
+        long now = data.now();
         paintSlab(g);
 
         // soil tiles first ...
@@ -189,22 +247,10 @@ public class GardenPanel extends ScreenPanel {
                 if (c < 0 || c >= gn) continue;
                 GardenPlot p = data.getPlot(r, c);
                 if (p.isEmpty()) continue;
-                double x = cellX(r, c), y = cellY(r, c) + gth * 0.12;
-                GameRenderer.plant(g, p, x, y, gtw * 0.44, time);
-                if (p.isMature()) {
-                    double s = Math.sin(time * 4 + r * 2 + c) * 0.5 + 0.5;
-                    GameRenderer.sparkle(g, x + gtw * 0.2, y - gtw * 0.55, gtw * 0.03 + s * gtw * 0.03, new Color(0xFFF59D));
-                    GameRenderer.sparkle(g, x - gtw * 0.22, y - gtw * 0.38, gtw * 0.06 - s * gtw * 0.03, new Color(0xFFFFFF));
-                } else {                                      // growth bar
-                    int bw = (int) (gtw * 0.34), bh = Math.max(4, (int) (gtw * 0.04));
-                    int bx = (int) (x - bw / 2.0), by = (int) (cellY(r, c) + gth * 0.2);
-                    g.setColor(GameRenderer.BLACK); g.fillRect(bx - 2, by - 2, bw + 4, bh + 4);
-                    g.setColor(new Color(0x5B5B5B)); g.fillRect(bx, by, bw, bh);
-                    g.setColor(new Color(0x7CFF7C)); g.fillRect(bx, by, (int) (bw * p.progress()), bh);
-                }
+                paintPlant(g, p, r, c, now);
             }
 
-        paintHoverInfo(g);
+        paintHoverInfo(g, now);
         for (Floater f : floaters) {
             float a = (float) Math.max(0, 1 - f.age / 1.4);
             Color col = new Color(f.color.getRed(), f.color.getGreen(), f.color.getBlue(), (int) (255 * a));
@@ -214,10 +260,39 @@ public class GardenPanel extends ScreenPanel {
         paintToast(g, w, h);
     }
 
+    private void paintPlant(Graphics2D g, GardenPlot p, int r, int c, long now) {
+        double x = cellX(r, c), y = cellY(r, c) + gth * 0.12;
+        long untilDeath = p.msUntilDeath(now);
+        boolean warning = p.isMature() && untilDeath <= GameConfig.WARNING_MS;
+        boolean wilted = warning && ((long) (time * 3) % 2 == 0);          // blinks while the flower is nearly dead
+        GameRenderer.plant(g, p, x, y, gtw * 0.44, time, wilted);
+
+        int bw = (int) (gtw * 0.34), bh = Math.max(4, (int) (gtw * 0.04));
+        int bx = (int) (x - bw / 2.0), by = (int) (cellY(r, c) + gth * 0.2);
+        double fraction; Color barColor;
+        if (p.isMature()) {                                                  // ripe: bar = time left before it dies
+            fraction = Math.min(1.0, untilDeath / (double) GameConfig.DEATH_MS);
+            barColor = warning ? new Color(0xFF4A4A) : (fraction < 0.6 ? new Color(0xFFD23F) : new Color(0x7CFF7C));
+            double s = Math.sin(time * 4 + r * 2 + c) * 0.5 + 0.5;
+            if (!warning) {
+                GameRenderer.sparkle(g, x + gtw * 0.2, y - gtw * 0.55, gtw * 0.03 + s * gtw * 0.03, new Color(0xFFF59D));
+                GameRenderer.sparkle(g, x - gtw * 0.22, y - gtw * 0.38, gtw * 0.06 - s * gtw * 0.03, Color.WHITE);
+            } else {                                                         // big red countdown above the head
+                GameRenderer.text(g, "! " + (untilDeath / 1000 + 1) + "s !", (int) x, (int) (y - gtw * 0.72),
+                        Math.max(12f, (float) (gtw * 0.15)), new Color(0xFF4A4A), Color.WHITE, 0);
+            }
+        } else {                                                             // growing: bar = growth progress
+            fraction = p.progress();
+            barColor = new Color(0x7CFF7C);
+        }
+        g.setColor(GameRenderer.BLACK); g.fillRect(bx - 2, by - 2, bw + 4, bh + 4);
+        g.setColor(new Color(0x5B5B5B)); g.fillRect(bx, by, bw, bh);
+        g.setColor(barColor); g.fillRect(bx, by, (int) (bw * fraction), bh);
+    }
+
     private void paintSlab(Graphics2D g) {
         double half = gn * gtw / 2, deep = gn * gth;
         double lx = gcx - half, rx = gcx + half, my = gtop + deep / 2, by = gtop + deep;
-        // left side (lighter) and right side (darker)
         Path2D left = new Path2D.Double();
         left.moveTo(lx, my); left.lineTo(gcx, by); left.lineTo(gcx, by + gd); left.lineTo(lx, my + gd); left.closePath();
         Path2D right = new Path2D.Double();
@@ -227,7 +302,6 @@ public class GardenPanel extends ScreenPanel {
         g.setPaint(new GradientPaint(0, (float) my, new Color(0x8A4824), 0, (float) (by + gd), new Color(0x3A1C0C)));
         g.fill(right);
         g.setPaint(null);
-        // black top plate = the grid lines between the tiles
         Polygon top = new Polygon(new int[]{(int) lx, (int) gcx, (int) rx, (int) gcx}, new int[]{(int) my, (int) gtop, (int) my, (int) by}, 4);
         g.setColor(GameRenderer.BLACK);
         g.fillPolygon(top);
@@ -236,27 +310,50 @@ public class GardenPanel extends ScreenPanel {
         g.setStroke(new BasicStroke(1));
     }
 
+    // little offsets (fractions of the soil patch) used for cracks, droplets and fertilizer speckles
+    private static final double[][] SPOTS = { {-0.45, 0.0}, {0.4, 0.1}, {0.0, -0.45}, {0.05, 0.45}, {-0.2, 0.22}, {0.2, -0.2}, {-0.15, -0.2}, {0.22, 0.28} };
+
     private void paintTile(Graphics2D g, int r, int c) {
         double x = cellX(r, c), y = cellY(r, c);
         GardenPlot p = data.getPlot(r, c);
         double hw = gtw / 2 * 0.9, hh = gth / 2 * 0.9;
-        g.setColor(new Color(0x63BA68));
+        g.setColor(new Color(0x63BA68));                       // grass border of the tile
         g.fillPolygon(diamond(x, y, hw, hh));
-        g.setColor(new Color(0x82D486));                    // light top-left edge
+        g.setColor(new Color(0x82D486));
         g.setStroke(new BasicStroke(Math.max(1.5f, (float) gtw * 0.012f)));
         g.drawLine((int) (x - hw), (int) y, (int) x, (int) (y - hh));
         g.setStroke(new BasicStroke(1));
-        // soil patch in the middle (darker when something is planted)
-        g.setColor(p.isEmpty() ? new Color(0x8B5A33) : new Color(0x5E3B22));
-        g.fillPolygon(diamond(x, y, hw * 0.55, hh * 0.55));
-        g.setColor(new Color(0x3A2312));
-        g.drawPolygon(diamond(x, y, hw * 0.55, hh * 0.55));
+
+        // the soil: DRY = light dusty tan with cracks, WET (watered) = dark with blue droplets
+        double sw = hw * 0.66, sh = hh * 0.66;
+        int dot = Math.max(2, (int) (gtw * 0.022));
+        if (p.isWatered()) {
+            g.setColor(new Color(0x4A2D18)); g.fillPolygon(diamond(x, y, sw, sh));
+            g.setColor(new Color(0x2A180B)); g.drawPolygon(diamond(x, y, sw, sh));
+            g.setColor(new Color(0x6FB4EA));
+            for (int i = 0; i < 4; i++) g.fillRect((int) (x + SPOTS[i][0] * sw), (int) (y + SPOTS[i][1] * sh), dot, dot);
+        } else {
+            g.setColor(new Color(0xCDA874)); g.fillPolygon(diamond(x, y, sw, sh));
+            g.setColor(new Color(0x8E6B3E)); g.drawPolygon(diamond(x, y, sw, sh));
+            for (int i = 0; i < 3; i++) {
+                int px = (int) (x + SPOTS[i + 4][0] * sw), py = (int) (y + SPOTS[i + 4][1] * sh);
+                g.drawLine(px, py, px + dot * 2, py + dot);
+            }
+        }
+        // active fertilizer: speckles in its colour on the soil
+        if (p.getFertilizer() != null) {
+            for (int i = 0; i < SPOTS.length; i++) {
+                int px = (int) (x + SPOTS[i][0] * sw * 0.9), py = (int) (y + SPOTS[i][1] * sh * 0.9);
+                g.setColor(GameRenderer.BLACK); g.fillRect(px - 1, py - 1, dot + 2, dot + 2);
+                g.setColor(p.getFertilizer().color); g.fillRect(px, py, dot, dot);
+            }
+        }
 
         if (r == hoverR && c == hoverC) {
             Color outline = Color.WHITE;
             if (p.isMature()) outline = new Color(0xFFD23F);
-            else if (fertilizerMode && !p.isEmpty()) outline = new Color(0xFFEB3B);
-            
+            else if (tool == Tool.WATER) outline = new Color(0x6FB4EA);
+            else if (tool == Tool.FERTILIZER) outline = new Color(0xFFEB3B);
             g.setColor(outline);
             g.setStroke(new BasicStroke(Math.max(3f, (float) gtw * 0.025f)));
             g.drawPolygon(diamond(x, y, hw, hh));
@@ -269,17 +366,22 @@ public class GardenPanel extends ScreenPanel {
         }
     }
 
-    /** Small label above the hovered plot explaining what a click will do. */
-    private void paintHoverInfo(Graphics2D g) {
-        if (hoverR < 0 || seedDialog.isVisible()) return;
+    /** Small label above the hovered plot explaining its state and what a click will do. */
+    private void paintHoverInfo(Graphics2D g, long now) {
+        if (hoverR < 0 || seedDialog.isVisible() || fertilizerDialog.isVisible()) return;
         GardenPlot p = data.getPlot(hoverR, hoverC);
+        String fert = p.getFertilizer() == null ? "" : "  [" + p.getFertilizer().name + "]";
         String t;
         if (p.isEmpty()) {
-            Flower sel = data.getSeeds().getSelected();
-            t = sel == null ? "Empty plot - open SEEDS to pick a seed" : "Click to plant " + sel.name;
-        } else if (p.isMature()) t = p.getFlower().name + " is ready! Click to harvest (+$" + p.getFlower().reward + ")";
-        else t = p.getFlower().name + " (" + p.getFlower().rarity.label + ") - " + (p.remainingMs() / 1000 + 1) + "s left"
-                + (fertilizerMode ? "  - click to fertilize ($" + PlayerData.FERTILIZER_COST + ")" : "");
+            if (!p.isWatered()) t = tool == Tool.WATER ? "Dry soil - click to water it" : "Dry soil - use WATER before planting";
+            else if (tool == Tool.FERTILIZER) t = "Watered soil" + fert + " - click to add " + activeFertilizer.name;
+            else t = "Watered soil" + fert + (data.getSeeds().total() > 0 ? " - click to plant a random seed" : " - buy SEEDS to plant");
+        } else if (p.isMature()) {
+            t = p.getFlower().name + " is ready! Click to harvest (+$" + p.getFlower().reward + ") - dies in " + (p.msUntilDeath(now) / 1000 + 1) + "s";
+        } else {
+            t = p.getFlower().name + " (" + p.getFlower().rarity.label + ") - " + (p.remainingMs() / 1000 + 1) + "s left" + fert
+                + (tool == Tool.FERTILIZER ? " - click to fertilize" : "");
+        }
         float size = Math.max(12f, getHeight() * 0.026f);
         g.setFont(GameRenderer.font(size));
         int tw = g.getFontMetrics().stringWidth(t) + 24, th = (int) (size * 1.9);
@@ -289,33 +391,45 @@ public class GardenPanel extends ScreenPanel {
         GameRenderer.text(g, t, x + tw / 2, Math.max(4, y) + (int) (th * 0.68), size, new Color(0x2B1D1D), null, 0);
     }
 
-    /** Bottom bar: coins, seed count, selected seed (like the reference screenshot). */
+    /** Bottom bar: coins, seeds, fertilizers and the tool in your hand (like the reference screenshot). */
     private void paintHud(Graphics2D g, int w, int h) {
         int icon = (int) (h * 0.075);
-        float size = h * 0.05f;
+        float size = h * 0.05f, small = h * 0.03f;
         int y = (int) (h * 0.885), baseline = y + (int) (icon * 0.72);
-        int x = (int) gcx - (int) (w * 0.22);
+        String money = String.valueOf(data.getMoney());
+        String seeds = String.valueOf(data.getSeeds().total());
+        String ferts = String.valueOf(data.getFertilizers().total());
+        String toolText = tool == Tool.WATER ? "Tool: WATER"
+                : tool == Tool.FERTILIZER ? "Tool: " + activeFertilizer.name + " x" + data.getFertilizers().count(activeFertilizer)
+                : "Tool: none (click to plant)";
+        g.setFont(GameRenderer.font(size));
+        FontMetrics fm = g.getFontMetrics();
+        g.setFont(GameRenderer.font(small));
+        int toolW = g.getFontMetrics().stringWidth(toolText);
+        int gap = (int) (w * 0.03), pad = 8;
+        int total = 3 * (icon + pad) + fm.stringWidth(money) + fm.stringWidth(seeds) + fm.stringWidth(ferts) + 3 * gap + toolW;
+        int x = (int) gcx - total / 2;
         GameRenderer.coin(g, x, y, icon);
-        GameRenderer.text(g, String.valueOf(data.getMoney()), x + icon + 8, baseline, size, Color.WHITE, GameRenderer.BLACK, -1);
-        x += (int) (w * 0.17);
+        GameRenderer.text(g, money, x + icon + pad, baseline, size, Color.WHITE, GameRenderer.BLACK, -1);
+        x += icon + pad + fm.stringWidth(money) + gap;
         GameRenderer.seedBag(g, x, y, icon);
-        GameRenderer.text(g, String.valueOf(data.getSeeds().total()), x + icon + 8, baseline, size, Color.WHITE, GameRenderer.BLACK, -1);
-        x += (int) (w * 0.12);
-        Flower sel = data.getSeeds().getSelected();
-        if (sel != null) {
-            PixelArt.draw(g, PixelArt.head(sel), x, y, icon, icon);
-            GameRenderer.text(g, sel.name + " x" + data.getSeeds().count(sel), x + icon + 8, baseline, size * 0.6f, Color.WHITE, GameRenderer.BLACK, -1);
-        } else {
-            GameRenderer.text(g, "No seed selected", x, baseline, size * 0.6f, Color.WHITE, GameRenderer.BLACK, -1);
-        }
+        GameRenderer.text(g, seeds, x + icon + pad, baseline, size, Color.WHITE, GameRenderer.BLACK, -1);
+        x += icon + pad + fm.stringWidth(seeds) + gap;
+        Fertilizer shown = activeFertilizer != null ? activeFertilizer : FertilizerRegistry.ALL.get(0);
+        PixelArt.draw(g, PixelArt.fertilizerBag(shown), x, y, icon, icon);
+        GameRenderer.text(g, ferts, x + icon + pad, baseline, size, Color.WHITE, GameRenderer.BLACK, -1);
+        x += icon + pad + fm.stringWidth(ferts) + gap;
+        GameRenderer.text(g, toolText, x, baseline, small, tool == Tool.NONE ? Color.WHITE : new Color(0xFFE23B), GameRenderer.BLACK, -1);
     }
 
     private void paintToast(Graphics2D g, int w, int h) {
         String t = null;
         float alpha = 1f;
         long left = toastUntil - System.currentTimeMillis();
-        if (fertilizerMode) t = "FERTILIZER ON: click a growing plant ($" + PlayerData.FERTILIZER_COST + "). Click FERTILIZER or press ESC to cancel.";
-        if (left > 0 && !toastText.isEmpty()) { t = toastText; alpha = Math.min(1f, left / 500f); }
+        if (tool == Tool.WATER) t = "WATER ON: click empty plots to water them. Click WATER or press ESC to stop.";
+        else if (tool == Tool.FERTILIZER) t = activeFertilizer.name + " selected: click a watered empty plot or a growing plant. ESC to stop.";
+        boolean showingToast = left > 0 && !toastText.isEmpty();
+        if (showingToast) { t = toastText; alpha = Math.min(1f, left / 500f); }
         if (t == null) return;
         float size = Math.max(13f, h * 0.03f);
         g.setFont(GameRenderer.font(size));
@@ -324,10 +438,11 @@ public class GardenPanel extends ScreenPanel {
         int x = Math.max(minX, (int) gcx - tw / 2), y = (int) (h * 0.025);
         Composite old = g.getComposite();
         g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha));
-        boolean err = left > 0 && toastError;
-        GameRenderer.box(g, Math.max(8, x), y, tw, th, err ? new Color(0xE57373) : (fertilizerMode && left <= 0 ? new Color(0xFFE082) : new Color(0xFFF1CF)), 3);
+        boolean err = showingToast && toastError;
+        Color fill = err ? new Color(0xE57373) : (showingToast ? new Color(0xFFF1CF) : new Color(0xFFE082));
+        GameRenderer.box(g, x, y, tw, th, fill, 3);
         float fs = GameRenderer.fitSize(g, t, size, tw - 24);
-        GameRenderer.text(g, t, Math.max(8, x) + tw / 2, y + (int) (th * 0.67), fs, err ? Color.WHITE : new Color(0x2B1D1D), err ? new Color(0x5A1010) : null, 0);
+        GameRenderer.text(g, t, x + tw / 2, y + (int) (th * 0.67), fs, err ? Color.WHITE : new Color(0x2B1D1D), err ? new Color(0x5A1010) : null, 0);
         g.setComposite(old);
     }
 }

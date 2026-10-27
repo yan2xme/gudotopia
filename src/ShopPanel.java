@@ -1,38 +1,43 @@
 import javax.swing.*;
 import java.awt.*;
 
-/** The right-hand "Buy:" panel: FERTILIZER, SEEDS, LARGER PLOT (+ FLOWERS collection button). */
+/**
+ * The right-hand panel. Top group "Buy:" = FERTILIZER, SEEDS, LARGER PLOT.
+ * Bottom group = garden tools and menu: WATER, FLOWERS (collection), SAVE.
+ */
 public class ShopPanel extends JPanel {
-    private final PixelButton fertilizer, seeds, larger, collection;
+    private final PixelButton fertilizer, seeds, larger, water, collection, save;
 
-    public ShopPanel(Runnable onFertilizer, Runnable onSeeds, Runnable onLarger, Runnable onCollection) {
+    public ShopPanel(Runnable onFertilizer, Runnable onSeeds, Runnable onLarger,
+                     Runnable onWater, Runnable onCollection, Runnable onSave) {
         setLayout(null);
         setOpaque(false);
-        fertilizer = new PixelButton("FERTILIZER $" + PlayerData.FERTILIZER_COST, onFertilizer);
+        fertilizer = new PixelButton("FERTILIZER $" + FertilizerRegistry.SHOP_PRICE, onFertilizer);
         seeds = new PixelButton("SEEDS $" + PlayerData.SEED_COST, onSeeds);
         larger = new PixelButton("LARGER PLOT", onLarger);
+        water = new PixelButton("WATER", onWater);
         collection = new PixelButton("FLOWERS", onCollection);
-        add(fertilizer); add(seeds); add(larger); add(collection);
+        save = new PixelButton("SAVE", onSave);
+        add(fertilizer); add(seeds); add(larger); add(water); add(collection); add(save);
     }
 
-    /** Update labels (prices change as the garden grows) and the fertilizer highlight. */
-    public void refresh(PlayerData d, boolean fertilizerMode) {
-        fertilizer.setActive(fertilizerMode);
+    /** Update labels (the garden price grows) and highlight the tool that is switched on. */
+    public void refresh(PlayerData d, boolean waterOn, boolean fertilizerOn) {
+        water.setActive(waterOn);
+        fertilizer.setActive(fertilizerOn);
         int cost = d.nextExpandCost();
         larger.setLabel(cost < 0 ? "MAX SIZE" : "LARGER PLOT $" + cost);
         larger.setEnabled(cost >= 0);
     }
 
-    private int buttonHeight() { return (int) Math.min(60, getHeight() / 7.2); }
+    private int buttonHeight() { return (int) Math.min(58, getHeight() / 9.1); }
 
     @Override public void doLayout() {
-        int bh = buttonHeight(), gap = (int) (bh * 0.35), w = getWidth();
+        int bh = buttonHeight(), gap = (int) (bh * 0.3), w = getWidth();
         int y = (int) (bh * 0.95);
-        for (PixelButton b : new PixelButton[]{fertilizer, seeds, larger}) {
-            b.setBounds(0, y, w, bh + 6);
-            y += bh + gap;
-        }
-        collection.setBounds(0, y + gap, w, bh + 6);
+        for (PixelButton b : new PixelButton[]{fertilizer, seeds, larger}) { b.setBounds(0, y, w, bh + 6); y += bh + gap; }
+        y += gap;                                          // extra space between the two groups
+        for (PixelButton b : new PixelButton[]{water, collection, save}) { b.setBounds(0, y, w, bh + 6); y += bh + gap; }
     }
 
     @Override protected void paintComponent(Graphics g0) {

@@ -5,13 +5,14 @@ import java.util.List;
 /** Simple instructions screen. */
 public class HowToPlayPanel extends ScreenPanel {
     private static final String[] STEPS = {
-        "1.  Open SEEDS and buy seeds for $2. Every seed is a RANDOM flower - rare ones are hard to find!",
-        "2.  Pick a seed from your seed list, then click an empty plot to plant it.",
-        "3.  Flowers grow by themselves. Hover over a plot to see how long is left.",
-        "4.  Click a fully grown flower to harvest it and earn money.",
-        "5.  FERTILIZER ($30): click it, then click a growing plant to speed it up.",
-        "6.  LARGER PLOT: expand the garden to make room for more flowers.",
-        "7.  Every flower is one of our classmates! Harvest a flower once to unlock it forever in the FLOWERS collection. Can you find them all?"
+        "SEEDS:  Click SEEDS, then BUY SEED ($" + PlayerData.SEED_COST + "). Every seed is a RANDOM flower - rare ones are hard to find. Your seeds are kept in your seed bag.",
+        "WATER:  Click WATER, then click an empty plot to soak the soil (it turns dark). Dry soil can NOT be planted. Click WATER again, or press ESC, to put the can away.",
+        "FERTILIZER (optional):  Click FERTILIZER to buy a RANDOM fertilizer ($" + FertilizerRegistry.SHOP_PRICE + "), then click one in your stock to use it. Click a WATERED empty plot (or a growing plant) to apply it. Worm = +50% growth speed, Manure = +100%. One fertilizer per plot.",
+        "PLANT:  With no tool selected, click a watered plot. A random seed from your bag is planted - more copies of a seed means it is picked more often. The order is: water, (fertilize), plant.",
+        "GROW & DIE:  Flowers grow by themselves, even while you are on another screen or the game is closed. A fully grown flower must be HARVESTED within " + GameConfig.DEATH_MS / 1000 + " seconds or it dies and gives nothing! It droops and flashes when less than " + GameConfig.WARNING_MS / 1000 + " seconds are left.",
+        "EARN MONEY:  Click a fully grown flower to harvest it and sell it (Common $5 ... Mythical $150). The soil dries out again, so water it before the next seed. Spend money on seeds, fertilizer and LARGER PLOT.",
+        "COLLECTION:  The first time you harvest a flower it is unlocked forever in FLOWERS. Flowers that died do not count.",
+        "SAVING:  The game saves automatically (and when you press SAVE or BACK). Every garden is its own save slot: NEW starts a fresh garden, LOAD continues one you made earlier."
     };
     private final PixelButton back;
 
@@ -33,7 +34,7 @@ public class HowToPlayPanel extends ScreenPanel {
         int x = bx + (int) (bw * 0.06), top = by + (int) (h * 0.16), maxW = (int) (bw * 0.88);
         int availH = by + bh - (int) (h * 0.04) - top;
         // pick the biggest font size whose wrapped text still fits inside the panel
-        float size = Math.max(13f, h * 0.031f);
+        float size = Math.max(13f, h * 0.030f);
         FontMetrics fm;
         while (true) {
             g.setFont(GameRenderer.font(size));
