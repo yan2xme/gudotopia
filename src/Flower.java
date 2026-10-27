@@ -31,5 +31,6 @@ public final class Flower {
         this.hairStyle = hairStyle;
     }
 
-    public long growthMillis() { return growthSeconds * 1000L; }
+    /** Growth time in ms (can be scaled for testing with -Dgudotopia.growthScale=...). */
+    public long growthMillis() { return Math.max(1L, Math.round(growthSeconds * 1000L * GameConfig.GROWTH_SCALE)); }
 }

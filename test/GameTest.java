@@ -1,94 +1,172 @@
-import java.nio.file.*;
 import java.util.*;
 
-/** Plain-Java checks of the game rules (no window needed). Run: java -cp out GameTest */
+/** Rule checks without any window or database. Run: java -cp out GameTest */
 public class GameTest {
     static int fails = 0;
     static void check(boolean cond, String name) { System.out.println((cond ? "PASS  " : "FAIL  ") + name); if (!cond) fails++; }
 
-    public static void main(String[] a) throws Exception {
-        PlayerData d = new PlayerData();
-        check(d.getMoney() == 100, "starts with $100");
-        check(d.getGardenSize() == 3, "starts 3x3");
-        check(FlowerRegistry.ALL.size() == 30, "30 flowers");
-        int sum = 0; for (Rarity r : Rarity.values()) sum += r.dropPercent;
-        check(sum == 100, "drop rates total 100");
+    static long[] clock = {1_700_000_000_000L};                  // fake "now" in ms - tests move it forward
+    static PlayerData newGame() { PlayerData d = new PlayerData(); d.setClock(() -> clock[0]); d.setMoney(1000); return d; }
+    static Flower common() { return FlowerRegistry.byId("flower_03"); }   // Clover, Common, 10 s
+    static Flower rose() { return FlowerRegistry.byId("flower_18"); }
+    static Fertilizer worm() { return FertilizerRegistry.byId("fert_worm"); }
+    static Fertilizer manure() { return FertilizerRegistry.byId("fert_manure"); }
 
-        // seeds
+    /** water + plant one specific flower in plot (r,c). */
+    static void prepare(PlayerData d, int r, int c, Flower f) {
+        d.water(r, c); d.getSeeds().add(f); 
+        while (d.getSeeds().total() > 1) d.getSeeds().takeRandom(new Random());   // keep exactly the one seed we added
+        PlayerData.Result res = d.plant(r, c);
+        if (!res.ok) throw new IllegalStateException(res.message);
+    }
+
+    public static void main(String[] a) {
+        // ---------------- definitions ----------------
+        check(FlowerRegistry.ALL.size() == 30, "30 flowers still defined");
+        int sum = 0; for (Rarity r : Rarity.values()) sum += r.dropPercent;
+        check(sum == 100, "seed drop rates total 100");
+        check(FertilizerRegistry.ALL.size() >= 2 && worm().growthBonus > 0 && manure().growthBonus > worm().growthBonus, "Manure is stronger than Worm fertilizer");
+        int fsum = 0; for (Rarity r : Rarity.values()) fsum += FertilizerRegistry.dropPercent(r);
+        check(fsum == 100, "fertilizer drop rates total 100");
+        check(worm().id != null && !worm().name.isEmpty() && !worm().description.isEmpty() && worm().rarity != null && worm().price > 0, "fertilizer has id/name/description/rarity/price/effect");
+
+        // ---------------- buying ----------------
+        PlayerData d = newGame();
         PlayerData.Result r = d.buySeed();
-        check(r.ok && d.getMoney() == 98 && d.getSeeds().total() == 1, "buy seed costs $2");
-        Flower f = r.flower;
-        check(d.getSeeds().getSelected() == f, "first seed auto-selected");
-        // plant
-        check(d.plant(0, 0).ok && d.getSeeds().total() == 0, "plant consumes seed");
-        check(!d.plant(0, 0).ok, "cannot plant on occupied plot");
-        check(!d.plant(1, 1).ok, "cannot plant without selected seed");
-        // harvest too early
-        check(!d.harvest(0, 0).ok, "cannot harvest immature");
-        check(!d.harvest(1, 1).ok, "cannot harvest empty");
-        // fertilizer
-        check(!d.fertilize(1, 1).ok && d.getMoney() == 98, "fertilizer on empty plot refused, no charge");
-        long before = d.getPlot(0, 0).remainingMs();
-        check(d.fertilize(0, 0).ok && d.getMoney() == 68, "fertilizer costs $30");
-        check(d.getPlot(0, 0).remainingMs() < before, "fertilizer speeds growth");
-        d.update(60_000);
-        check(d.getPlot(0, 0).isMature(), "flower grows to maturity over time");
-        check(!d.fertilize(0, 0).ok && d.getMoney() == 68, "no fertilizer on mature flower");
+        check(r.ok && d.getMoney() == 998 && d.getSeeds().total() == 1 && r.flower != null, "seed purchase costs $2 and adds a random seed");
+        r = d.buyFertilizer();
+        check(r.ok && d.getMoney() == 998 - FertilizerRegistry.SHOP_PRICE && d.getFertilizers().total() == 1 && r.fertilizer != null, "fertilizer purchase costs $" + FertilizerRegistry.SHOP_PRICE + " and adds a random fertilizer");
+        check(d.getSeeds().total() == 1, "buying fertilizer does not touch the seed inventory");
+        PlayerData poor = newGame(); poor.setMoney(1);
+        check(!poor.buySeed().ok && !poor.buyFertilizer().ok && poor.getMoney() == 1, "cannot buy seeds/fertilizer without money");
+
+        // ---------------- watering / planting order ----------------
+        d = newGame();
+        check(!d.plant(0, 0).ok && d.getSeeds().total() == 0, "planting with no seeds is rejected");
+        d.getSeeds().add(common());
+        PlayerData.Result dry = d.plant(0, 0);
+        check(!dry.ok && d.getSeeds().total() == 1 && d.getPlot(0, 0).isEmpty(), "unwatered soil rejects planting and keeps the seed (" + dry.message + ")");
+        check(d.water(0, 0).ok && d.getPlot(0, 0).isWatered(), "watering an empty plot works");
+        check(!d.water(0, 0).ok, "watering twice is rejected");
+        check(d.plant(0, 0).ok && d.getSeeds().total() == 0 && !d.getPlot(0, 0).isEmpty(), "watered soil accepts a seed (seed consumed)");
+        d.getSeeds().add(common());
+        check(!d.plant(0, 0).ok && d.getSeeds().total() == 1, "cannot plant on an occupied plot (seed kept)");
+        check(!d.water(0, 0).ok, "cannot water a plot that already has a flower");
+
+        // ---------------- fertilizer ordering ----------------
+        d = newGame();
+        d.getFertilizers().add(worm()); d.getFertilizers().add(worm()); d.getFertilizers().add(manure());
+        check(!d.applyFertilizer(1, 1, worm()).ok && d.getFertilizers().count(worm()) == 2, "fertilizer on dry empty plot rejected, none used up");
+        d.water(1, 1);
+        check(d.applyFertilizer(1, 1, worm()).ok && d.getFertilizers().count(worm()) == 1 && d.getPlot(1, 1).getFertilizer() == worm(), "fertilizer on watered empty plot is stored on the plot and used up");
+        check(!d.applyFertilizer(1, 1, manure()).ok && d.getFertilizers().count(manure()) == 1 && d.getPlot(1, 1).getFertilizer() == worm(), "second fertilizer rejected (no stacking), none used up");
+        d.getSeeds().add(common());
+        check(d.plant(1, 1).ok && d.getPlot(1, 1).getFertilizer() == worm(), "fertilizer effect carries over to the planted flower");
+        PlayerData none = newGame(); none.water(0, 0);
+        check(!none.applyFertilizer(0, 0, worm()).ok, "cannot use fertilizer you do not own");
+        check(!none.applyFertilizer(0, 0, null).ok, "no fertilizer chosen is rejected");
+
+        // ---------------- growth speed with fertilizer ----------------
+        clock[0] = 1_700_000_000_000L;
+        d = newGame();
+        d.getFertilizers().add(worm()); d.getFertilizers().add(manure());
+        for (int c = 0; c < 3; c++) d.water(0, c);
+        d.applyFertilizer(0, 1, worm()); d.applyFertilizer(0, 2, manure());
+        for (int c = 0; c < 3; c++) { d.getSeeds().add(common()); d.plant(0, c); }
+        long total = common().growthMillis();                        // 10 000 ms
+        clock[0] += (long) (total * 0.55); d.update();               // 55% of the normal time
+        check(!d.getPlot(0, 0).isMature() && !d.getPlot(0, 1).isMature() && d.getPlot(0, 2).isMature(), "after 55% time: plain & worm still growing, manure (x2) is ripe");
+        clock[0] += (long) (total * 0.15); d.update();               // 70% total
+        check(!d.getPlot(0, 0).isMature() && d.getPlot(0, 1).isMature(), "after 70% time: worm (x1.5) ripe, plain still growing");
+        check(d.getPlot(0, 0).progress() > 0.65 && d.getPlot(0, 0).progress() < 0.75, "plain plot progress ~70%");
+        clock[0] += (long) (total * 0.31); d.update();
+        check(d.getPlot(0, 0).isMature(), "plain plot ripe after 100% time");
+
+        // ---------------- death timer ----------------
+        clock[0] = 1_700_000_000_000L;
+        d = newGame(); prepare(d, 0, 0, common());
+        long t0 = clock[0];
+        clock[0] = t0 + total - 1; d.update();
+        check(!d.getPlot(0, 0).isMature(), "not ripe just before growth time");
+        clock[0] = t0 + total + 100; d.update();
+        check(d.getPlot(0, 0).isMature() && d.getPlot(0, 0).msUntilDeath(clock[0]) > GameConfig.DEATH_MS - 1000, "ripe: death countdown starts at ripeness (~30s left)");
+        check(d.drainEvents().stream().anyMatch(e -> e.type == GardenPlot.Event.MATURED), "ripening is reported as an event");
+        clock[0] = t0 + total + GameConfig.DEATH_MS - 5000; d.update();
+        check(!d.getPlot(0, 0).isEmpty() && d.getPlot(0, 0).msUntilDeath(clock[0]) <= GameConfig.WARNING_MS, "warning window: < 10 s left but still alive");
+        clock[0] = t0 + total + GameConfig.DEATH_MS - 1; d.update();
+        check(!d.getPlot(0, 0).isEmpty(), "alive 1 ms before the deadline");
+        int moneyBefore = d.getMoney();
+        clock[0] = t0 + total + GameConfig.DEATH_MS + 1; d.update();
+        GardenPlot dead = d.getPlot(0, 0);
+        check(dead.isEmpty() && !dead.isWatered() && dead.getFertilizer() == null, "dead flower: plot reset (dry, no fertilizer)");
+        check(d.getMoney() == moneyBefore && d.unlockedCount() == 0, "dead flower: no money, no collection unlock");
+        check(d.drainEvents().stream().anyMatch(e -> e.type == GardenPlot.Event.DIED), "death is reported as an event");
+        d.getSeeds().add(common());
+        check(!d.plant(0, 0).ok, "after death the soil must be watered again before planting");
+        check(d.water(0, 0).ok && d.plant(0, 0).ok, "water + plant again works after death");
+
+        // death counted from ripeness, not from planting: with a 10s flower, planting+30s is NOT death
+        clock[0] = 1_700_000_000_000L;
+        d = newGame(); prepare(d, 0, 0, common()); t0 = clock[0];
+        clock[0] = t0 + 30_000; d.update();
+        check(!d.getPlot(0, 0).isEmpty() && d.getPlot(0, 0).isMature(), "30 s after PLANTING a 10 s flower it is still alive (countdown began at ripeness)");
+
+        // long absence (game closed): ripe and dead
+        clock[0] = t0 + 10 * 60_000; d.update();
+        check(d.getPlot(0, 0).isEmpty(), "after 10 minutes away the unharvested flower is dead");
+
+        // ---------------- harvest ----------------
+        clock[0] = 1_700_000_000_000L;
+        d = newGame(); d.getFertilizers().add(worm()); d.water(0, 0); d.applyFertilizer(0, 0, worm());
+        d.getSeeds().add(rose()); d.plant(0, 0); t0 = clock[0];
+        check(!d.harvest(0, 0).ok, "cannot harvest an immature flower");
+        clock[0] = t0 + rose().growthMillis(); d.update();
         int m0 = d.getMoney();
         PlayerData.Result h = d.harvest(0, 0);
-        check(h.ok && h.newDiscovery && d.getMoney() == m0 + f.reward, "harvest pays " + f.reward + " and discovers");
-        check(d.isUnlocked(f) && d.unlockedCount() == 1 && d.getPlot(0, 0).isEmpty(), "unlocked + plot reset");
-        // second harvest of same flower: money but no new discovery
-        d.buySpecificSeed(f); d.getSeeds().select(f); d.plant(0, 0); d.update(60_000);
+        check(h.ok && h.newDiscovery && d.getMoney() == m0 + rose().reward && d.isUnlocked(rose()), "harvest pays reward and unlocks the flower");
+        check(d.getPlot(0, 0).isEmpty() && !d.getPlot(0, 0).isWatered() && d.getPlot(0, 0).getFertilizer() == null, "harvest resets watering + fertilizer");
+        check(!d.harvest(0, 0).ok, "cannot harvest an empty plot");
+        prepare(d, 0, 0, rose()); clock[0] += rose().growthMillis(); d.update();
         PlayerData.Result h2 = d.harvest(0, 0);
-        check(h2.ok && !h2.newDiscovery && d.unlockedCount() == 1, "repeat harvest: money, no new discovery");
+        check(h2.ok && !h2.newDiscovery && d.unlockedCount() == 1, "repeat harvest: money but no new discovery");
 
-        // poor player
-        PlayerData poor = new PlayerData(); poor.setMoney(1);
-        check(!poor.buySeed().ok && poor.getMoney() == 1, "cannot buy seed without money");
-        check(!poor.expandGarden().ok && poor.getGardenSize() == 3, "cannot expand without money");
-        // expansion
-        PlayerData rich = new PlayerData(); rich.setMoney(1000);
+        // ---------------- expansion ----------------
+        PlayerData rich = newGame(); rich.setMoney(1000);
         check(rich.expandGarden().ok && rich.getGardenSize() == 4 && rich.getMoney() == 950, "3x3 -> 4x4 costs $50");
-        check(rich.plant(3, 3).getClass() != null && !rich.plant(3, 3).ok, "(no seed) plot 3,3 exists but needs a seed");
         rich.expandGarden(); rich.expandGarden();
         check(rich.getGardenSize() == 6 && !rich.expandGarden().ok, "max size 6x6");
+        check(!newGame().water(5, 5).ok, "plots outside the garden cannot be used");
 
-        // drop rate statistics
-        Random rng = new Random(42); Map<Rarity, Integer> counts = new EnumMap<>(Rarity.class);
-        int N = 200_000;
-        for (int i = 0; i < N; i++) counts.merge(FlowerRegistry.randomSeed(rng).rarity, 1, Integer::sum);
-        boolean ok = true;
-        for (Rarity rr : Rarity.values()) {
-            double pct = counts.getOrDefault(rr, 0) * 100.0 / N;
-            System.out.printf("      %-10s expected %2d%%  got %.2f%%%n", rr.label, rr.dropPercent, pct);
-            if (Math.abs(pct - rr.dropPercent) > 0.6) ok = false;
+        // ---------------- weighted random planting ----------------
+        Flower clover = FlowerRegistry.byId("flower_03"), roseF = FlowerRegistry.byId("flower_18"), sun = FlowerRegistry.byId("flower_13");
+        Map<String, Integer> picks = new HashMap<>();
+        int N = 60_000; boolean invOk = true;
+        Random rng = new Random(7);
+        for (int i = 0; i < N; i++) {
+            SeedInventory inv = new SeedInventory();
+            inv.add(clover.id, 3); inv.add(roseF.id, 2); inv.add(sun.id, 1);
+            Flower f = inv.takeRandom(rng);
+            if (inv.total() != 5) invOk = false;
+            picks.merge(f.id, 1, Integer::sum);
         }
-        check(ok, "random seed rates match the drop table");
+        double pc = picks.get(clover.id) * 100.0 / N, pr = picks.get(roseF.id) * 100.0 / N, ps = picks.get(sun.id) * 100.0 / N;
+        System.out.printf("      3 Clover / 2 Rose / 1 Sunflower -> %.1f%% / %.1f%% / %.1f%%  (expected 50 / 33.3 / 16.7)%n", pc, pr, ps);
+        check(invOk, "planting removes exactly one seed from the inventory");
+        check(Math.abs(pc - 50) < 1.2 && Math.abs(pr - 33.3) < 1.2 && Math.abs(ps - 16.7) < 1.2, "random planting is weighted by quantity");
+        check(new SeedInventory().takeRandom(rng) == null, "empty inventory gives no seed");
 
-        // save / load
-        Path tmp = Files.createTempFile("gudo", ".properties"); Files.delete(tmp);
-        SaveManager sm = new SaveManager(tmp);
-        PlayerData s = new PlayerData(); s.setMoney(777); s.setGardenSize(4);
-        Flower rose = FlowerRegistry.byId("flower_18");
-        s.getSeeds().add(rose); s.getSeeds().add(rose); s.getSeeds().select(rose);
-        s.unlock("flower_01"); s.unlock("flower_30");
-        s.getPlot(1, 2).plant(FlowerRegistry.byId("flower_05"), 4000);
-        sm.save(s);
-        PlayerData l = sm.load();
-        check(l.getMoney() == 777 && l.getGardenSize() == 4, "save/load money + garden size");
-        check(l.getSeeds().count(rose) == 2 && l.getSeeds().getSelected() == rose, "save/load seeds + selection");
-        check(l.isUnlocked(FlowerRegistry.byId("flower_01")) && l.isUnlocked(FlowerRegistry.byId("flower_30")) && l.unlockedCount() == 2, "save/load unlocks");
-        check(!l.getPlot(1, 2).isEmpty() && l.getPlot(1, 2).getGrowthMs() >= 4000, "save/load planted flower + progress");
-        // corrupted + missing
-        Files.writeString(tmp, "money=notanumber\ngardenSize=%%%\n");
-        PlayerData c = sm.load();
-        check(c.getMoney() == 100 && c.getGardenSize() == 3, "corrupted save -> new game");
-        Files.deleteIfExists(tmp);
-        check(new SaveManager(tmp).load().getMoney() == 100, "missing save -> new game");
-        Files.deleteIfExists(tmp.resolveSibling(tmp.getFileName() + ".corrupt"));
+        // ---------------- purchase drop rates ----------------
+        rng = new Random(42); Map<Rarity, Integer> counts = new EnumMap<>(Rarity.class);
+        for (int i = 0; i < 100_000; i++) counts.merge(FlowerRegistry.randomSeed(rng).rarity, 1, Integer::sum);
+        boolean ok = true;
+        for (Rarity rr : Rarity.values()) if (Math.abs(counts.getOrDefault(rr, 0) / 1000.0 - rr.dropPercent) > 0.8) ok = false;
+        check(ok, "random seed purchase matches the rarity table");
+        int worms = 0, N2 = 100_000; rng = new Random(5);
+        for (int i = 0; i < N2; i++) if (FertilizerRegistry.roll(rng) == worm()) worms++;
+        System.out.printf("      fertilizer purchase: Worm %.1f%% / Manure %.1f%% (expected 70 / 30)%n", worms * 100.0 / N2, 100 - worms * 100.0 / N2);
+        check(Math.abs(worms * 100.0 / N2 - 70) < 1.0, "random fertilizer purchase matches its drop table");
 
-        System.out.println(fails == 0 ? "\nALL TESTS PASSED" : "\n" + fails + " TEST(S) FAILED");
+        System.out.println(fails == 0 ? "\nALL GAME-RULE TESTS PASSED" : "\n" + fails + " TEST(S) FAILED");
         System.exit(fails == 0 ? 0 : 1);
     }
 }

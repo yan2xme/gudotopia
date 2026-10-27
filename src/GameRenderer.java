@@ -234,9 +234,9 @@ public final class GameRenderer {
     // ------------------------------------------------------------------ plants
     /**
      * Draws the plant in a plot. (cx, baseY) is the bottom-centre of the sprite, width its width.
-     * t = time in seconds (used for the gentle sway and the bounce of ripe flowers).
+     * t = time in seconds (used for the gentle sway and the bounce of ripe flowers). wilted = show the dying look.
      */
-    public static void plant(Graphics2D g, GardenPlot p, double cx, double baseY, double width, double t) {
+    public static void plant(Graphics2D g, GardenPlot p, double cx, double baseY, double width, double t, boolean wilted) {
         int stage = p.stage();
         if (stage < 0) return;
         double s = width / 32.0;
@@ -247,7 +247,8 @@ public final class GameRenderer {
         if (stage == 2) PixelArt.draw(g, PixelArt.bud(f), x, y, 32 * s, 40 * s);
         if (stage == 3) {
             double bob = Math.abs(Math.sin(t * 3 + f.id.hashCode())) * s * 2;
-            PixelArt.draw(g, PixelArt.head(f), x + 4 * s, y - bob, 24 * s, 24 * s);
+            // a dying flower droops and turns brown (the caller blinks `wilted` on and off as a warning)
+            PixelArt.draw(g, wilted ? PixelArt.wiltedHead(f) : PixelArt.head(f), x + 4 * s, wilted ? y + s * 1.5 : y - bob, 24 * s, 24 * s);
         }
     }
 

@@ -6,20 +6,24 @@ import java.awt.image.BufferedImage;
  * any missing picture is replaced by built-in drawn art. Layout follows the reference mock-up.
  */
 public class MainMenuPanel extends ScreenPanel {
-    private final PixelButton start, howTo;
+    private final PixelButton[] buttons;
 
     public MainMenuPanel(GameFrame frame) {
-        start = new PixelButton("START", frame::showGarden);
-        howTo = new PixelButton("HOW TO PLAY?", frame::showHowTo);
-        add(start);
-        add(howTo);
+        // the four menu buttons, in this order
+        buttons = new PixelButton[] {
+            new PixelButton("NEW", frame::showNew),
+            new PixelButton("LOAD", frame::showLoad),
+            new PixelButton("HOW TO PLAY", frame::showHowTo),
+            new PixelButton("EXIT", frame::exitGame)
+        };
+        for (PixelButton b : buttons) add(b);
     }
 
     @Override public void doLayout() {
         int w = getWidth(), h = getHeight();
-        int bw = (int) (w * 0.32), bh = (int) (h * 0.15), y = (int) (h * 0.62);
-        start.setBounds((int) (w * 0.163), y, bw, bh);
-        howTo.setBounds((int) (w * 0.542), y, bw, bh);
+        int gap = (int) (w * 0.025), bw = (int) (w * 0.205), bh = (int) (h * 0.14), y = (int) (h * 0.625);
+        int x = (w - (4 * bw + 3 * gap)) / 2;                 // one centred row of four buttons
+        for (PixelButton b : buttons) { b.setBounds(x, y, bw, bh); x += bw + gap; }
     }
 
     /** Draws an image at the given size with crisp pixels (pixelArt=true) or smooth scaling (logo). */
