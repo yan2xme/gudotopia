@@ -7,7 +7,7 @@ import java.util.*;
  *
  * Buying fertilizer works like buying seeds: you pay a flat SHOP_PRICE and receive a RANDOM fertilizer.
  * First a rarity is rolled using DROP_PERCENT (must total 100), then one fertilizer of that rarity is picked.
- * Each fertilizer's own "price" is its value (stored in the database, shown in the inventory); it is
+ * Each fertilizer's own "price" is its value (shown in the inventory); it is
  * what a future fixed-price shop would charge.
  */
 public final class FertilizerRegistry {

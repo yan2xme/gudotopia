@@ -249,12 +249,11 @@ public class UiCheck {
         shot("20_menu_after_restart");
         // what the database says about the flower at plot (2,2) of Alpha, BEFORE the game loads it
         long deadline = 0; String storedFlower = null; boolean storedWatered = false;
-        try (java.sql.Connection c = frame.saves().open(); java.sql.PreparedStatement ps = c.prepareStatement(
-                "SELECT flower_id, watered, death_deadline_ms FROM garden_plots WHERE save_id = 1 AND plot_row = 2 AND plot_col = 2");
-             java.sql.ResultSet rs = ps.executeQuery()) {
-            rs.next(); storedFlower = rs.getString(1); storedWatered = rs.getInt(2) == 1; deadline = rs.getLong(3);
-        }
-        System.out.println("      DB row for Alpha plot (2,2): flower=" + storedFlower + " watered=" + storedWatered + " death_deadline=" + deadline + " (now=" + System.currentTimeMillis() + ")");
+        java.util.Properties raw = new java.util.Properties();
+        try (var rd = java.nio.file.Files.newBufferedReader(frame.saves().getSaveFile(1))) { raw.load(rd); }
+        storedFlower = raw.getProperty("plot.2.2.flower"); storedWatered = "1".equals(raw.getProperty("plot.2.2.watered"));
+        deadline = Long.parseLong(raw.getProperty("plot.2.2.deadlineMs", "0"));
+        System.out.println("      File entry for Alpha plot (2,2): flower=" + storedFlower + " watered=" + storedWatered + " death_deadline=" + deadline + " (now=" + System.currentTimeMillis() + ")");
         click("LOAD"); sleep(400);
         shot("21_load_after_restart");
         check(frame.saves().listSaves().size() == 2, "after restarting the application both saves are still listed");

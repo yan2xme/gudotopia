@@ -48,7 +48,7 @@ public class NewGamePanel extends ScreenPanel {
         String problem = SaveManager.validateName(field.getText());
         if (problem != null) { error = problem; return; }
         try {
-            frame.createAndStart(field.getText());              // creates the save slot in SQLite, then opens the garden
+            frame.createAndStart(field.getText());              // creates the save slot as a save file, then opens the garden
         } catch (SaveException e) {
             error = e.getMessage();                             // e.g. "A save called ... already exists"
         }

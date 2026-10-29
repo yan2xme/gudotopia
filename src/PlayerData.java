@@ -3,7 +3,7 @@ import java.util.function.LongSupplier;
 
 /**
  * All the progress of ONE save slot AND the core game rules (buying, watering, fertilizing, planting,
- * harvesting...). It knows nothing about Swing or SQL, so it can be tested without a window or a database.
+ * harvesting...). It knows nothing about Swing or files, so it can be tested without a window.
  *
  * Required order for growing a flower:  WATER the soil  ->  (optional) FERTILIZE  ->  PLANT.
  */
@@ -41,7 +41,7 @@ public class PlayerData {
         }
     }
 
-    private long saveId;                 // database id of this save slot (0 = not stored yet)
+    private long saveId;                 // id of this save slot (its file number) (0 = not stored yet)
     private String saveName = "";
     private int money = START_MONEY;
     private int gardenSize = START_SIZE;
@@ -51,6 +51,9 @@ public class PlayerData {
     private final Set<String> unlocked = new LinkedHashSet<>();
     private final List<PlotEvent> pendingEvents = new ArrayList<>();
     private final Random rng = new Random();
+    // Factory Method pattern: the shop asks a factory for the item instead of building it itself
+    private final ItemFactory<Flower> seedFactory = new SeedFactory();
+    private final ItemFactory<Fertilizer> fertilizerFactory = new FertilizerFactory();
     private LongSupplier clock = System::currentTimeMillis;   // replaceable in tests
 
     public PlayerData() {
@@ -114,7 +117,7 @@ public class PlayerData {
     public Result buySeed() {
         if (money < SEED_COST) return Result.fail("Not enough money! A seed costs $" + SEED_COST + ".");
         money -= SEED_COST;
-        Flower f = FlowerRegistry.randomSeed(rng);
+        Flower f = seedFactory.create(rng);
         seeds.add(f);
         return new Result(true, "You got a " + f.rarity.label + " " + f.name + " seed!", f, null, false, 0);
     }
@@ -124,7 +127,7 @@ public class PlayerData {
         int price = FertilizerRegistry.SHOP_PRICE;
         if (money < price) return Result.fail("Not enough money! Fertilizer costs $" + price + ".");
         money -= price;
-        Fertilizer f = FertilizerRegistry.roll(rng);
+        Fertilizer f = fertilizerFactory.create(rng);
         fertilizers.add(f);
         return new Result(true, "You got " + f.name + "! (" + f.rarity.label + ", " + f.effectText() + ")", null, f, false, 0);
     }

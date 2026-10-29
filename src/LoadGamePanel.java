@@ -8,7 +8,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
-/** LOAD GAME screen: lists every save slot read from the database; pick one and press LOAD. */
+/** LOAD GAME screen: lists every save slot read from the save files; pick one and press LOAD. */
 public class LoadGamePanel extends ScreenPanel {
     private static final DateTimeFormatter WHEN = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.systemDefault());
 
@@ -37,7 +37,7 @@ public class LoadGamePanel extends ScreenPanel {
         addMouseListener(m); addMouseMotionListener(m); addMouseWheelListener(m);
     }
 
-    /** Re-reads the list from the database every time the screen is opened. */
+    /** Re-reads the list from the save files every time the screen is opened. */
     @Override protected void onShown() {
         try {
             saves = frame.saves().listSaves();
