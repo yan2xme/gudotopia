@@ -1,25 +1,27 @@
 # Gudotopia - Java Swing gardening game
 
-Java 17+ / Swing / Java2D with SQLite saves. Art is drawn in code.
+Java 17+ / Swing / Java2D with plain-text saves. Art is drawn in code.
 
 ## Requirements
-Java 17 or newer. The game stores saves in **SQLite** through JDBC (`org.xerial:sqlite-jdbc 3.46.1.3`, already included in `lib/`).
+Java 17 or newer. No external libraries. Saves are plain text files.
 
 ## Run in IntelliJ IDEA
-**Option A - Maven (recommended):** File > Open... > select `pom.xml` > "Open as Project". IntelliJ downloads the SQLite driver itself.
-Then open `src/Main.java` and press the green run arrow. (Project SDK: Java 17+.)
-
-**Option B - no Maven:** File > Open the `Gudotopia` folder, right-click `src` > Mark Directory as > Sources Root, then
-File > Project Structure > Libraries > + > Java > choose `lib/sqlite-jdbc-3.46.1.3.jar`. Run `src/Main.java`.
-(The folder `src/gudotopia/` holds old unused draft files; ignore or delete it.)
-
+File > Open the `Gudotopia` folder, right-click `src` > Mark Directory as > Sources Root (Project SDK: Java 17+),
+then run `src/Main.java`. (`pom.xml` is optional: opening it as a Maven project works too.)
+The folder `src/gudotopia/` holds old unused draft files; ignore or delete it.
 Run configuration > Working directory must be the project root (the default).
 
 ## Run from a terminal
     ./run.sh            (Linux/macOS)        run.bat  (Windows)
 
 ## Where is the data?
-`~/.gudotopia/gudotopia.db` (Windows: `C:\Users\<you>\.gudotopia\gudotopia.db`). Demo queries: `sql/demo_queries.sql`.
+One text file per save: `~/.gudotopia/saves/save_1.properties`, `save_2.properties`, ...
+(Windows: `C:\Users\<you>\.gudotopia\saves\`). The folder is hidden because its name starts with a dot.
+Open a file in Notepad to see `money=`, `seed.flower_03=2`, `plot.1.1.watered=1`, ...
+
+## Design patterns
+* Singleton: `SaveManager.getInstance()`.
+* Factory Method: `ItemFactory` with `SeedFactory` and `FertilizerFactory`, used by `PlayerData.buySeed()/buyFertilizer()`.
 
 ## Files (all in `src/`)
 | File | Job |
@@ -35,7 +37,7 @@ Run configuration > Working directory must be the project root (the default).
 | PlayerData | **all game rules**: money, seeds, plant, harvest, fertilize, expand (no Swing) |
 | GardenPlot / SeedInventory | plot growth state / owned seeds + selection |
 | Flower / Rarity / FlowerRegistry | flower data, **drop rates + rewards**, the 30-flower table |
-| SaveManager | SQLite/JDBC database: schema, saves, load/save, one-time import of old `save.properties` |
+| SaveManager | Singleton: reads/writes the save files, list/create/load/save, one-time import of old `save.properties` |
 | NewGamePanel / LoadGamePanel | create a named save / choose a save |
 | Fertilizer / FertilizerRegistry / FertilizerInventory / FertilizerDialog | fertilizer items, shop odds, inventory, pop-up |
 | GameConfig | timings (30 s death timer etc.) |
@@ -49,7 +51,7 @@ Run configuration > Working directory must be the project root (the default).
 * Real faces: see `assets/faces/README.txt`.
 
 ## Tests (optional)
-    javac -d out -cp "lib/*" src/*.java test/*.java
-    java -Djava.awt.headless=true -cp "out:lib/*" GameTest      (game rules)
-    java -Djava.awt.headless=true -cp "out:lib/*" DbTest        (SQLite; uses a temp folder)
+    javac -d out src/*.java test/*.java
+    java -Djava.awt.headless=true -cp out GameTest          (game rules)
+    java -Djava.awt.headless=true -cp out SaveFileTest      (save files; uses a temp folder)
 (`UiCheck` drives the real window with a robot and needs a display.)

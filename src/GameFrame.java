@@ -5,7 +5,7 @@ import java.awt.event.WindowEvent;
 
 /**
  * The main window. Holds all screens in a CardLayout and manages WHICH save slot is currently open.
- * The save/load work itself is done by SaveManager (SQLite); this class only decides when to call it.
+ * The save/load work itself is done by SaveManager (text files); this class only decides when to call it.
  */
 public class GameFrame extends JFrame {
     public static final String MENU = "menu", GARDEN = "garden", COLLECTION = "collection",
@@ -51,7 +51,7 @@ public class GameFrame extends JFrame {
     }
 
     // ------------------------------------------------------------------ saving / switching games
-    /** Writes the open game to SQLite. Returns false (and remembers the reason) if that failed - progress stays in memory. */
+    /** Writes the open game to its save file. Returns false (and remembers the reason) if that failed - progress stays in memory. */
     public boolean saveGame() {
         if (data == null) return true;
         try {

@@ -75,7 +75,7 @@ public class GardenPlot {
         deathDeadlineMs = 0;
     }
 
-    /** Used by the database loader to rebuild a plot exactly as it was saved. */
+    /** Used by the save-file loader to rebuild a plot exactly as it was saved. */
     public void restore(boolean watered, Flower f, Fertilizer fert, long growthMs, long updatedMs, long deathDeadlineMs) {
         this.watered = watered;
         this.flower = f;

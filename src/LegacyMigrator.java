@@ -5,7 +5,7 @@ import java.util.Properties;
 
 /**
  * Reads the OLD save format (~/.gudotopia/save.properties, java.util.Properties) into a PlayerData object.
- * It only PARSES the file; SaveManager is the one that writes the result into SQLite.
+ * It only PARSES the file; SaveManager is the one that writes the result into a new save file.
  */
 public final class LegacyMigrator {
     private LegacyMigrator() {}

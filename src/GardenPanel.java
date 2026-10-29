@@ -132,7 +132,7 @@ public class GardenPanel extends ScreenPanel {
         }
         if (res != null) {
             toast(res.message, !res.ok);
-            if (res.ok) autosave();                       // every important action is written to the database
+            if (res.ok) autosave();                       // every important action is written to the save file
         }
     }
 
@@ -158,7 +158,7 @@ public class GardenPanel extends ScreenPanel {
         toastUntil = System.currentTimeMillis() + 3600;
     }
 
-    /** Writes the game to SQLite (through GameFrame). A failed save is shown, never ignored. */
+    /** Writes the game to its save file (through GameFrame). A failed save is shown, never ignored. */
     public void autosave() {
         sinceSave = 0;
         if (!frame.saveGame()) toast("Could not save: " + frame.getLastSaveError(), true);

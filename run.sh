@@ -1,3 +1,3 @@
 #!/bin/sh
-# Compiles and starts Gudotopia (needs Java 17+). The SQLite driver is in lib/.
-cd "$(dirname "$0")" && mkdir -p out && javac -d out -cp "lib/*" $(ls src/*.java) && java -cp "out:lib/*" Main
+# Compiles and starts Gudotopia (needs Java 17+).
+cd "$(dirname "$0")" && mkdir -p out && javac -d out src/*.java && java -cp out Main
