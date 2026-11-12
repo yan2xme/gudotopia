@@ -38,6 +38,7 @@ public class GameFrame extends JFrame {
         setMinimumSize(new Dimension(900, 600));
         setLocationRelativeTo(null);
         showMenu();
+        AudioManager.getInstance().playMusic("bgm");
     }
 
     public SaveManager saves() { return saveManager; }
