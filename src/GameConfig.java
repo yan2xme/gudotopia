@@ -19,6 +19,4 @@ public final class GameConfig {
     /** How often the game auto-saves while you play. */
     public static final long AUTOSAVE_MS = 1000L * Long.getLong("gudotopia.autosaveSeconds", 15L);
 
-    /** Ripe flowers imported from an old save.properties get this long before they wither (kindness for migrated saves). */
-    public static final long LEGACY_GRACE_MS = 5 * 60 * 1000L;
 }

@@ -15,7 +15,6 @@ public class Main {
             }
             GameFrame frame = new GameFrame(saves);
             frame.setVisible(true);
-            frame.showStartupMessage();             // tells the player if an old save.properties was imported
         });
     }
 }
