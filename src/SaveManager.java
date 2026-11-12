@@ -150,6 +150,15 @@ public class SaveManager {
         return d;
     }
 
+    /** DELETE: removes one save slot's file for good. */
+    public synchronized void deleteSave(long saveId) {
+        try {
+            if (!Files.deleteIfExists(getSaveFile(saveId))) throw new SaveException("That save no longer exists.");
+        } catch (IOException e) {
+            throw new SaveException("Could not delete " + getSaveFile(saveId).getFileName() + ": " + e.getMessage(), e);
+        }
+    }
+
     /** SAVE: writes the whole current game state of one save slot into its file. */
     public synchronized void save(PlayerData d) {
         if (d.getSaveId() <= 0) throw new SaveException("This game has no save slot to write to.");

@@ -374,6 +374,7 @@ public class GardenPanel extends ScreenPanel {
                 g.setColor(p.getFertilizer().color); g.fillRect(px, py, dot, dot);
             }
             if (p.getFertilizer().id.equals("fert_worm")) paintWorm(g, r, c, x, y, sw, sh);
+            else if (p.getFertilizer().id.equals("fert_manure")) paintManure(g, r, c, x, y, sw, sh);
         }
 
         if (r == hoverR && c == hoverC) {
@@ -394,11 +395,13 @@ public class GardenPanel extends ScreenPanel {
     }
 
     /**
-     * A worm (assets/icons/worm.png) crawling back and forth across a plot that has Worm Fertilizer.
-     * Each plot's worm moves at its own pace; it turns around at the ends and stretches a little as it crawls.
+     * A worm crawling back and forth across a plot that has Worm Fertilizer. Neighbouring plots alternate between
+     * the two worm pictures (assets/icons/worm.png, worm2.png). Each worm moves at its own pace; it turns around at
+     * the ends and stretches a little as it crawls.
      */
     private void paintWorm(Graphics2D g, int r, int c, double x, double y, double sw, double sh) {
-        BufferedImage worm = PixelArt.loadFile("icons", "worm");
+        BufferedImage worm = PixelArt.loadFile("icons", (r + c) % 2 == 0 ? "worm" : "worm2");
+        if (worm == null) worm = PixelArt.loadFile("icons", "worm");
         if (worm == null) return;                                   // no picture: the coloured speckles are enough
         double phase = time * 0.9 + r * 1.7 + c * 2.3;
         double wx = x + Math.sin(phase) * sw * 0.25;                // left and right along the soil
@@ -411,6 +414,16 @@ public class GardenPanel extends ScreenPanel {
         if (!facingLeft) w.scale(-1, 1);                            // the picture faces left; mirror it to face right
         PixelArt.draw(w, worm, -ww / 2, 0, ww, wh);
         w.dispose();
+    }
+
+    /** A little manure pile (assets/icons/manure.png) on a plot with Manure Fertilizer, gently squishing. */
+    private void paintManure(Graphics2D g, int r, int c, double x, double y, double sw, double sh) {
+        BufferedImage pile = PixelArt.loadFile("icons", "manure");
+        if (pile == null) return;
+        double squish = 0.05 * Math.sin(time * 3 + r * 1.3 + c * 2.1);
+        double pw = sw * 0.62 * (1 + squish), ph = sw * 0.62 * pile.getHeight() / pile.getWidth() * (1 - squish);
+        double px = x - sw * 0.38, py = y + sh * 0.42 - ph;         // on the left of the soil, so the stem stays clear
+        PixelArt.draw(g, pile, px - pw / 2, py, pw, ph);
     }
 
     /** Small label above the hovered plot explaining its state and what a click will do. minY = bottom of the banner. */
