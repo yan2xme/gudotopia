@@ -107,16 +107,18 @@ public class LoadGamePanel extends ScreenPanel {
                 g.setColor(new Color(0xFFD23F)); g.setStroke(new BasicStroke(4));
                 g.drawRect(x + 5, y + 5, listW() - 10, rh - 10); g.setStroke(new BasicStroke(1));
             }
-            GameRenderer.text(g, s.name(), x + 22, y + (int) (rh * 0.40), rh * 0.34f, new Color(0x2B1D1D), null, -1);
+            float ns = GameRenderer.fitSize(g, s.name(), rh * 0.34f, (int) (listW() * 0.62));   // keep clear of "Last saved"
+            GameRenderer.text(g, s.name(), x + 22, y + (int) (rh * 0.40), ns, new Color(0x2B1D1D), null, -1);
             String line = "$" + s.money() + "   |   Garden " + s.gardenSize() + "x" + s.gardenSize()
                     + "   |   Flowers " + s.discovered() + "/" + FlowerRegistry.ALL.size();
-            GameRenderer.text(g, line, x + 22, y + (int) (rh * 0.78), rh * 0.24f, new Color(0x4A6A3A), null, -1);
+            float ls = GameRenderer.fitSize(g, line, rh * 0.24f, (int) (listW() * 0.60));       // keep clear of the date
+            GameRenderer.text(g, line, x + 22, y + (int) (rh * 0.78), ls, new Color(0x4A6A3A), null, -1);
             GameRenderer.text(g, "Last saved", x + listW() - 22, y + (int) (rh * 0.36), rh * 0.2f, new Color(0x8A7A65), null, 1);
             GameRenderer.text(g, WHEN.format(Instant.ofEpochMilli(s.lastPlayed())), x + listW() - 22, y + (int) (rh * 0.7), rh * 0.26f, new Color(0x3B2B1D), null, 1);
         }
         if (saves.size() > rows)
             GameRenderer.text(g, "scroll for more (" + saves.size() + " saves)", listX() + listW(), listY() + rows * (rowH() + rowGap()) + 14, h * 0.022f, Color.WHITE, GameRenderer.BLACK, 1);
         if (!error.isEmpty())
-            GameRenderer.text(g, error, w / 2, (int) (h * 0.83), h * 0.03f, new Color(0xC62828), Color.WHITE, 0);
+            GameRenderer.text(g, error, w / 2, (int) (h * 0.81), GameRenderer.fitSize(g, error, h * 0.03f, w - 40), new Color(0xC62828), Color.WHITE, 0);
     }
 }

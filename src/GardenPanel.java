@@ -1,6 +1,7 @@
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
+import java.awt.geom.AffineTransform;
 import java.awt.geom.Path2D;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -21,7 +22,7 @@ public class GardenPanel extends ScreenPanel {
 
     private final GameFrame frame;
     private final PlayerData data;
-    private final PixelButton back;
+    private final PixelButton back, sound;
     private final ShopPanel shop;
     private final SeedDialog seedDialog;
     private final FertilizerDialog fertilizerDialog;
@@ -46,6 +47,7 @@ public class GardenPanel extends ScreenPanel {
         this.data = data;
 
         back = new PixelButton("BACK", () -> { autosave(); frame.showMenu(); });
+        sound = new PixelButton(soundLabel(), this::toggleSound);
         shop = new ShopPanel(this::openFertilizer, this::openSeeds, this::buyLargerPlot,
                 this::toggleWater, frame::showCollection, this::manualSave);
         seedDialog = new SeedDialog(this, data);
@@ -53,6 +55,7 @@ public class GardenPanel extends ScreenPanel {
         add(seedDialog);        // dialogs are added first => painted on top of everything else
         add(fertilizerDialog);
         add(back);
+        add(sound);
         add(shop);
 
         MouseAdapter m = new MouseAdapter() {
@@ -83,6 +86,13 @@ public class GardenPanel extends ScreenPanel {
     }
 
     // ------------------------------------------------------------------ tools & shop buttons
+    private static String soundLabel() { return AudioManager.getInstance().isMuted() ? "SOUND OFF" : "SOUND ON"; }
+
+    private void toggleSound() {
+        AudioManager.getInstance().toggleMute();
+        sound.setLabel(soundLabel());
+    }
+
     private void dropTool() { tool = Tool.NONE; activeFertilizer = null; }
 
     private void toggleWater() {
@@ -104,6 +114,7 @@ public class GardenPanel extends ScreenPanel {
     private void buyLargerPlot() {
         PlayerData.Result r = data.expandGarden();
         toast(r.message, !r.ok);
+        AudioManager.getInstance().play(r.ok ? "buy" : "error");
         if (r.ok) autosave();
     }
 
@@ -118,20 +129,27 @@ public class GardenPanel extends ScreenPanel {
         handleEvents(data.drainEvents());
         GardenPlot p = data.getPlot(r, c);
         PlayerData.Result res = null;
+        String sfx = null;                                // sound played when the action succeeds
         if (p.isMature()) {
             res = data.harvest(r, c);
+            sfx = res.newDiscovery ? "discover" : "harvest";
             if (res.ok) addFloater("+$" + res.amount, r, c, res.newDiscovery ? new Color(0xFFD23F) : new Color(0x7CFF7C));
         } else if (tool == Tool.WATER) {
             res = data.water(r, c);
+            sfx = "water";
         } else if (tool == Tool.FERTILIZER) {
             res = data.applyFertilizer(r, c, activeFertilizer);
+            sfx = "fertilize";
         } else if (p.isEmpty()) {
             res = data.plant(r, c);
+            sfx = "plant";
         } else {
             toast(p.getFlower().name + " is still growing - " + (p.remainingMs() / 1000 + 1) + "s left. Fertilizer makes it faster!", true);
+            AudioManager.getInstance().play("error");
         }
         if (res != null) {
             toast(res.message, !res.ok);
+            AudioManager.getInstance().play(res.ok ? sfx : "error");
             if (res.ok) autosave();                       // every important action is written to the save file
         }
     }
@@ -149,7 +167,7 @@ public class GardenPanel extends ScreenPanel {
         if (died > 1) toast(died + " flowers withered because they were not harvested in time!", true);
         else if (died == 1) toast("Your " + lastDied.flowerName + " withered - it was not harvested in time! No reward. Water the soil again to replant.", true);
         else if (lastRipe != null) toast(lastRipe.flowerName + " is ready! Harvest it within " + GameConfig.DEATH_MS / 1000 + " seconds.", false);
-        if (died > 0) autosave();                         // store the reset plots right away
+        if (died > 0) { autosave(); AudioManager.getInstance().play("wither"); }                         // store the reset plots right away
     }
 
     public void toast(String text, boolean error) {
@@ -199,9 +217,9 @@ public class GardenPanel extends ScreenPanel {
         double left = w * 0.03, right = w - shopWidth() - w * 0.05;
         double topY = h * 0.22, bottomY = h * 0.87;
         double availW = right - left, availH = bottomY - topY;
-        gtw = Math.min(availW / gn, availH / (gn / 2.0 + 0.4));
+        gtw = Math.min(availW / gn, availH / (gn / 2.0 + 0.5));
         gth = gtw / 2;
-        gd = gtw * 0.4;
+        gd = gtw * 0.5;                                       // how deep the block is
         gcx = (left + right) / 2;
         gtop = topY + (availH - (gn * gth + gd)) / 2;
     }
@@ -223,6 +241,7 @@ public class GardenPanel extends ScreenPanel {
         seedDialog.setBounds(0, 0, w, h);
         fertilizerDialog.setBounds(0, 0, w, h);
         back.setBounds(16, 16, (int) (w * 0.17) + 4, (int) (h * 0.10) + 4);
+        sound.setBounds(16, back.getY() + back.getHeight() + 8, back.getWidth(), (int) (h * 0.07) + 4);
         int sw = shopWidth();
         shop.setBounds(w - sw - (int) (w * 0.03), (int) (h * 0.07), sw, (int) (h * 0.80));
     }
@@ -250,14 +269,14 @@ public class GardenPanel extends ScreenPanel {
                 paintPlant(g, p, r, c, now);
             }
 
-        paintHoverInfo(g, now);
         for (Floater f : floaters) {
             float a = (float) Math.max(0, 1 - f.age / 1.4);
             Color col = new Color(f.color.getRed(), f.color.getGreen(), f.color.getBlue(), (int) (255 * a));
             GameRenderer.text(g, f.text, (int) f.x, (int) (f.y - f.age * 50), h * 0.05f, col, new Color(0, 0, 0, (int) (200 * a)), 0);
         }
         paintHud(g, w, h);
-        paintToast(g, w, h);
+        int bannerBottom = paintToast(g, w, h);
+        paintHoverInfo(g, now, bannerBottom);
     }
 
     private void paintPlant(Graphics2D g, GardenPlot p, int r, int c, long now) {
@@ -277,9 +296,9 @@ public class GardenPanel extends ScreenPanel {
             if (!warning) {
                 GameRenderer.sparkle(g, x + gtw * 0.2, y - gtw * 0.55, gtw * 0.03 + s * gtw * 0.03, new Color(0xFFF59D));
                 GameRenderer.sparkle(g, x - gtw * 0.22, y - gtw * 0.38, gtw * 0.06 - s * gtw * 0.03, Color.WHITE);
-            } else {                                                         // big red countdown above the head
-                GameRenderer.text(g, "! " + (untilDeath / 1000 + 1) + "s !", (int) x, (int) (y - gtw * 0.72),
-                        Math.max(12f, (float) (gtw * 0.15)), new Color(0xFF4A4A), Color.WHITE, 0);
+            } else {                                  // red countdown at the corner of the head (small, so a full garden stays readable)
+                GameRenderer.text(g, (untilDeath / 1000 + 1) + "s", (int) (x + gtw * 0.21), (int) (y - gtw * 0.5),
+                        Math.max(12f, (float) (gtw * 0.13)), new Color(0xFF3B3B), Color.WHITE, 0);
             }
         } else {                                                             // growing: bar = growth progress
             fraction = p.progress();
@@ -290,23 +309,35 @@ public class GardenPanel extends ScreenPanel {
         g.setColor(barColor); g.fillRect(bx, by, (int) (bw * fraction), bh);
     }
 
+    /**
+     * The grass block the garden sits on. Each of its three visible faces is a small pixel texture from PixelArt
+     * that is stretched onto the face with an AffineTransform (which is what gives the chunky, slanted pixels).
+     */
     private void paintSlab(Graphics2D g) {
         double half = gn * gtw / 2, deep = gn * gth;
         double lx = gcx - half, rx = gcx + half, my = gtop + deep / 2, by = gtop + deep;
-        Path2D left = new Path2D.Double();
-        left.moveTo(lx, my); left.lineTo(gcx, by); left.lineTo(gcx, by + gd); left.lineTo(lx, my + gd); left.closePath();
-        Path2D right = new Path2D.Double();
-        right.moveTo(gcx, by); right.lineTo(rx, my); right.lineTo(rx, my + gd); right.lineTo(gcx, by + gd); right.closePath();
-        g.setPaint(new GradientPaint(0, (float) my, new Color(0xA85A2E), 0, (float) (by + gd), new Color(0x4A2410)));
-        g.fill(left);
-        g.setPaint(new GradientPaint(0, (float) my, new Color(0x8A4824), 0, (float) (by + gd), new Color(0x3A1C0C)));
-        g.fill(right);
-        g.setPaint(null);
-        Polygon top = new Polygon(new int[]{(int) lx, (int) gcx, (int) rx, (int) gcx}, new int[]{(int) my, (int) gtop, (int) my, (int) by}, 4);
+        double t = gn * PixelArt.TEXELS;                      // texture pixels along one edge of the block
+        double ux = half / t, uy = deep / 2 / t, vy = gd / PixelArt.TEXELS;
+        g.drawImage(PixelArt.grassTop(gn), new AffineTransform(ux, uy, -ux, uy, gcx, gtop), null);        // top
+        g.drawImage(PixelArt.dirtSide(gn, false), new AffineTransform(ux, uy, 0, vy, lx, my), null);      // left side
+        g.drawImage(PixelArt.dirtSide(gn, true), new AffineTransform(ux, -uy, 0, vy, gcx, by), null);     // right side
+
+        // thin dark lines between the plots, then the black outline of the block
+        g.setColor(new Color(0, 0, 0, 55));
+        g.setStroke(new BasicStroke(Math.max(2f, (float) gtw * 0.02f)));
+        for (int i = 1; i < gn; i++) {
+            double dx = i * gtw / 2, dy = i * gth / 2;
+            g.drawLine((int) (gcx + dx), (int) (gtop + dy), (int) (lx + dx), (int) (my + dy));
+            g.drawLine((int) (gcx - dx), (int) (gtop + dy), (int) (rx - dx), (int) (my + dy));
+        }
+        Path2D outline = new Path2D.Double();
+        outline.moveTo(lx, my); outline.lineTo(gcx, gtop); outline.lineTo(rx, my); outline.lineTo(rx, my + gd);
+        outline.lineTo(gcx, by + gd); outline.lineTo(lx, my + gd); outline.closePath();
+        outline.moveTo(lx, my); outline.lineTo(gcx, by); outline.lineTo(rx, my);      // front edges of the top
+        outline.moveTo(gcx, by); outline.lineTo(gcx, by + gd);                        // front corner
         g.setColor(GameRenderer.BLACK);
-        g.fillPolygon(top);
-        g.setStroke(new BasicStroke(Math.max(2f, (float) gtw * 0.02f), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-        g.draw(left); g.draw(right);
+        g.setStroke(new BasicStroke(Math.max(2f, (float) gtw * 0.025f), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g.draw(outline);
         g.setStroke(new BasicStroke(1));
     }
 
@@ -316,13 +347,7 @@ public class GardenPanel extends ScreenPanel {
     private void paintTile(Graphics2D g, int r, int c) {
         double x = cellX(r, c), y = cellY(r, c);
         GardenPlot p = data.getPlot(r, c);
-        double hw = gtw / 2 * 0.9, hh = gth / 2 * 0.9;
-        g.setColor(new Color(0x63BA68));                       // grass border of the tile
-        g.fillPolygon(diamond(x, y, hw, hh));
-        g.setColor(new Color(0x82D486));
-        g.setStroke(new BasicStroke(Math.max(1.5f, (float) gtw * 0.012f)));
-        g.drawLine((int) (x - hw), (int) y, (int) x, (int) (y - hh));
-        g.setStroke(new BasicStroke(1));
+        double hw = gtw / 2 * 0.9, hh = gth / 2 * 0.9;         // (the grass around the soil is part of the block texture)
 
         // the soil: DRY = light dusty tan with cracks, WET (watered) = dark with blue droplets
         double sw = hw * 0.66, sh = hh * 0.66;
@@ -366,8 +391,8 @@ public class GardenPanel extends ScreenPanel {
         }
     }
 
-    /** Small label above the hovered plot explaining its state and what a click will do. */
-    private void paintHoverInfo(Graphics2D g, long now) {
+    /** Small label above the hovered plot explaining its state and what a click will do. minY = bottom of the banner. */
+    private void paintHoverInfo(Graphics2D g, long now, int minY) {
         if (hoverR < 0 || seedDialog.isVisible() || fertilizerDialog.isVisible()) return;
         GardenPlot p = data.getPlot(hoverR, hoverC);
         String fert = p.getFertilizer() == null ? "" : "  [" + p.getFertilizer().name + "]";
@@ -382,13 +407,16 @@ public class GardenPanel extends ScreenPanel {
             t = p.getFlower().name + " (" + p.getFlower().rarity.label + ") - " + (p.remainingMs() / 1000 + 1) + "s left" + fert
                 + (tool == Tool.FERTILIZER ? " - click to fertilize" : "");
         }
-        float size = Math.max(12f, getHeight() * 0.026f);
+        int y = Math.max(minY + 6, (int) (cellY(hoverR, hoverC) - gtw * 0.95));
+        // the buttons are drawn on top of the garden, so the label must stay beside them, never under them
+        int left = y < sound.getY() + sound.getHeight() + 6 ? sound.getX() + sound.getWidth() + 8 : 8;
+        int right = shop.getX() - 8;
+        float size = GameRenderer.fitSize(g, t, Math.max(12f, getHeight() * 0.026f), right - left - 24);
         g.setFont(GameRenderer.font(size));
         int tw = g.getFontMetrics().stringWidth(t) + 24, th = (int) (size * 1.9);
-        int x = (int) Math.max(8, Math.min(getWidth() - tw - 8, cellX(hoverR, hoverC) - tw / 2.0));
-        int y = (int) (cellY(hoverR, hoverC) - gtw * 0.95);
-        GameRenderer.box(g, x, Math.max(4, y), tw, th, new Color(0xFFF1CF), 3);
-        GameRenderer.text(g, t, x + tw / 2, Math.max(4, y) + (int) (th * 0.68), size, new Color(0x2B1D1D), null, 0);
+        int x = (int) Math.max(left, Math.min(right - tw, cellX(hoverR, hoverC) - tw / 2.0));
+        GameRenderer.box(g, x, y, tw, th, new Color(0xFFF1CF), 3);
+        GameRenderer.text(g, t, x + tw / 2, y + (int) (th * 0.68), size, new Color(0x2B1D1D), null, 0);
     }
 
     /** Bottom bar: coins, seeds, fertilizers and the tool in your hand (like the reference screenshot). */
@@ -408,7 +436,7 @@ public class GardenPanel extends ScreenPanel {
         int toolW = g.getFontMetrics().stringWidth(toolText);
         int gap = (int) (w * 0.03), pad = 8;
         int total = 3 * (icon + pad) + fm.stringWidth(money) + fm.stringWidth(seeds) + fm.stringWidth(ferts) + 3 * gap + toolW;
-        int x = (int) gcx - total / 2;
+        int x = Math.max(12, (int) gcx - total / 2);            // centred under the garden, but never off the left edge
         GameRenderer.coin(g, x, y, icon);
         GameRenderer.text(g, money, x + icon + pad, baseline, size, Color.WHITE, GameRenderer.BLACK, -1);
         x += icon + pad + fm.stringWidth(money) + gap;
@@ -416,33 +444,50 @@ public class GardenPanel extends ScreenPanel {
         GameRenderer.text(g, seeds, x + icon + pad, baseline, size, Color.WHITE, GameRenderer.BLACK, -1);
         x += icon + pad + fm.stringWidth(seeds) + gap;
         Fertilizer shown = activeFertilizer != null ? activeFertilizer : FertilizerRegistry.ALL.get(0);
-        PixelArt.draw(g, PixelArt.fertilizerBag(shown), x, y, icon, icon);
+        PixelArt.draw(g, PixelArt.icon(shown.id, PixelArt.fertilizerBag(shown)), x, y, icon, icon);
         GameRenderer.text(g, ferts, x + icon + pad, baseline, size, Color.WHITE, GameRenderer.BLACK, -1);
         x += icon + pad + fm.stringWidth(ferts) + gap;
+        small = GameRenderer.fitSize(g, toolText, small, w - 12 - x);      // shrink if a big wallet leaves little room
         GameRenderer.text(g, toolText, x, baseline, small, tool == Tool.NONE ? Color.WHITE : new Color(0xFFE23B), GameRenderer.BLACK, -1);
     }
 
-    private void paintToast(Graphics2D g, int w, int h) {
+    /**
+     * The message banner at the top: the latest toast, or the hint of the tool in your hand.
+     * It stays between the BACK button and the shop; a long message wraps onto two lines.
+     * Returns the y of its bottom edge (0 when nothing is shown).
+     */
+    private int paintToast(Graphics2D g, int w, int h) {
         String t = null;
         float alpha = 1f;
-        long left = toastUntil - System.currentTimeMillis();
+        long msLeft = toastUntil - System.currentTimeMillis();
         if (tool == Tool.WATER) t = "WATER ON: click empty plots to water them. Click WATER or press ESC to stop.";
         else if (tool == Tool.FERTILIZER) t = activeFertilizer.name + " selected: click a watered empty plot or a growing plant. ESC to stop.";
-        boolean showingToast = left > 0 && !toastText.isEmpty();
-        if (showingToast) { t = toastText; alpha = Math.min(1f, left / 500f); }
-        if (t == null) return;
+        boolean showingToast = msLeft > 0 && !toastText.isEmpty();
+        if (showingToast) { t = toastText; alpha = Math.min(1f, msLeft / 500f); }
+        if (t == null) return 0;
+        int left = back.getX() + back.getWidth() + 12, right = shop.getX() - 12;
         float size = Math.max(13f, h * 0.03f);
-        g.setFont(GameRenderer.font(size));
-        int minX = back.getX() + back.getWidth() + 12;          // keep clear of the BACK button
-        int tw = Math.min(w - minX - 12, g.getFontMetrics().stringWidth(t) + 40), th = (int) (size * 2.1);
-        int x = Math.max(minX, (int) gcx - tw / 2), y = (int) (h * 0.025);
+        List<String> lines;
+        while (true) {                                          // wrap; only shrink the text if two lines are not enough
+            g.setFont(GameRenderer.font(size));
+            lines = GameRenderer.wrap(t, g.getFontMetrics(), right - left - 28);
+            if (lines.size() <= 2 || size <= 10) break;
+            size -= 1;
+        }
+        FontMetrics fm = g.getFontMetrics();
+        int tw = 28, lineH = (int) (size * 1.25), pad = (int) (size * 0.45);
+        for (String line : lines) tw = Math.max(tw, fm.stringWidth(line) + 28);
+        int th = 2 * pad + lines.size() * lineH;
+        int x = Math.max(left, Math.min(right - tw, (int) gcx - tw / 2)), y = (int) (h * 0.025);
         Composite old = g.getComposite();
         g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha));
         boolean err = showingToast && toastError;
         Color fill = err ? new Color(0xE57373) : (showingToast ? new Color(0xFFF1CF) : new Color(0xFFE082));
         GameRenderer.box(g, x, y, tw, th, fill, 3);
-        float fs = GameRenderer.fitSize(g, t, size, tw - 24);
-        GameRenderer.text(g, t, x + tw / 2, y + (int) (th * 0.67), fs, err ? Color.WHITE : new Color(0x2B1D1D), err ? new Color(0x5A1010) : null, 0);
+        for (int i = 0; i < lines.size(); i++)
+            GameRenderer.text(g, lines.get(i), x + tw / 2, y + pad + (int) (size * 0.95) + i * lineH, size,
+                    err ? Color.WHITE : new Color(0x2B1D1D), err ? new Color(0x5A1010) : null, 0);
         g.setComposite(old);
+        return y + th;
     }
 }

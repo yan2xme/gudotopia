@@ -14,9 +14,12 @@ public class FertilizerDialog extends ItemDialog {
     @Override protected String ratesHeader() { return "Chance per purchase"; }
     @Override protected PlayerData.Result doBuy() { return data.buyFertilizer(); }
 
+    /** "Worm Fertilizer" -> "Worm": the shop title already says these are fertilizers, and the short name fits the small cells. */
+    private static String shortName(Fertilizer f) { return f.name.replace(" Fertilizer", ""); }
+
     private Entry entryOf(Fertilizer f, int count) {
-        return new Entry(f.name, f.effectText() + " (worth $" + f.price + ")", f.rarity, count, f,
-                (g, x, y, size) -> PixelArt.draw(g, PixelArt.fertilizerBag(f), x, y, size, size));
+        return new Entry(shortName(f), f.effectText() + " (worth $" + f.price + ")", f.rarity, count, f,
+                (g, x, y, size) -> PixelArt.draw(g, PixelArt.icon(f.id, PixelArt.fertilizerBag(f)), x, y, size, size));
     }
 
     @Override protected Entry entryFor(PlayerData.Result r) { return entryOf(r.fertilizer, 0); }
@@ -30,7 +33,7 @@ public class FertilizerDialog extends ItemDialog {
     @Override protected List<RateLine> rateLines() {
         List<RateLine> list = new ArrayList<>();
         for (Fertilizer f : FertilizerRegistry.ALL)
-            list.add(new RateLine(f.color, f.name.replace(" Fertilizer", "") + "  " + Math.round(FertilizerRegistry.chanceOf(f)) + "%  " + "(+" + Math.round(f.growthBonus * 100) + "% speed)"));
+            list.add(new RateLine(f.color, shortName(f) + "  " + Math.round(FertilizerRegistry.chanceOf(f)) + "%  " + "(+" + Math.round(f.growthBonus * 100) + "% speed)"));
         return list;
     }
 

@@ -71,9 +71,14 @@ public class NewGamePanel extends ScreenPanel {
         GameRenderer.text(g, "NEW GAME", w / 2, boxY() + (int) (h * 0.11), h * 0.065f, new Color(0x4A9A4E), new Color(0x1F3D22), 0);
         GameRenderer.text(g, "Name your garden:", boxX() + (int) (w * 0.06), boxY() + (int) (h * 0.265), h * 0.034f, new Color(0x3B2B1D), null, -1);
         GameRenderer.text(g, "Each name is its own save slot. Max " + SaveManager.MAX_NAME_LENGTH + " characters.", w / 2, boxY() + (int) (h * 0.46), h * 0.024f, new Color(0x7A6A55), null, 0);
-        if (!error.isEmpty()) {
-            float size = GameRenderer.fitSize(g, error, h * 0.03f, (int) (w * 0.56));
-            GameRenderer.text(g, error, w / 2, boxY() + (int) (h * 0.53), size, new Color(0xC62828), null, 0);
+        if (!error.isEmpty()) {                                  // a long message wraps onto two lines
+            float size = h * 0.027f;
+            g.setFont(GameRenderer.font(size));
+            int y = boxY() + (int) (h * 0.515);
+            for (String line : GameRenderer.wrap(error, g.getFontMetrics(), (int) (w * 0.52))) {
+                GameRenderer.text(g, line, w / 2, y, size, new Color(0xC62828), null, 0);
+                y += (int) (size * 1.25);
+            }
         }
     }
 }
