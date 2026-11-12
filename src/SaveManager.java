@@ -49,7 +49,6 @@ public class SaveManager {
         }
     }
 
-    public Path getSavesFolder() { return savesDir; }
     public Path getSaveFile(long id) { return savesDir.resolve("save_" + id + ".properties"); }
 
     // =====================================================================================================

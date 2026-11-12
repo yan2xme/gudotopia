@@ -4,6 +4,6 @@ import java.util.Random;
 public class FertilizerFactory implements ItemFactory<Fertilizer> {
     @Override
     public Fertilizer create(Random rng) {
-        return FertilizerRegistry.roll(rng);     // same drop table as before
+        return FertilizerRegistry.roll(rng);     // rolls the fertilizer drop table
     }
 }

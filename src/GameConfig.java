@@ -18,5 +18,4 @@ public final class GameConfig {
 
     /** How often the game auto-saves while you play. */
     public static final long AUTOSAVE_MS = 1000L * Long.getLong("gudotopia.autosaveSeconds", 15L);
-
 }

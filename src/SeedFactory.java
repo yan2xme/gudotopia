@@ -4,6 +4,6 @@ import java.util.Random;
 public class SeedFactory implements ItemFactory<Flower> {
     @Override
     public Flower create(Random rng) {
-        return FlowerRegistry.randomSeed(rng);   // same drop table as before
+        return FlowerRegistry.randomSeed(rng);   // rolls the rarity drop table
     }
 }
