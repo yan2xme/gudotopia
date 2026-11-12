@@ -1,5 +1,4 @@
 import java.awt.*;
-import java.util.ArrayList;
 import java.util.List;
 
 /** Simple instructions screen. */
@@ -10,10 +9,18 @@ public class HowToPlayPanel extends ScreenPanel {
         "FERTILIZER (optional):  Click FERTILIZER to buy a RANDOM fertilizer ($" + FertilizerRegistry.SHOP_PRICE + "), then click one in your stock to use it. Click a WATERED empty plot (or a growing plant) to apply it. Worm = +50% growth speed, Manure = +100%. One fertilizer per plot.",
         "PLANT:  With no tool selected, click a watered plot. A random seed from your bag is planted - more copies of a seed means it is picked more often. The order is: water, (fertilize), plant.",
         "GROW & DIE:  Flowers grow by themselves, even while you are on another screen or the game is closed. A fully grown flower must be HARVESTED within " + GameConfig.DEATH_MS / 1000 + " seconds or it dies and gives nothing! It droops and flashes when less than " + GameConfig.WARNING_MS / 1000 + " seconds are left.",
-        "EARN MONEY:  Click a fully grown flower to harvest it and sell it (Common $5 ... Mythical $150). The soil dries out again, so water it before the next seed. Spend money on seeds, fertilizer and LARGER PLOT.",
+        "EARN MONEY:  Click a fully grown flower to harvest it and sell it (" + priceList() + "). The soil dries out again, so water it before the next seed. Spend money on seeds, fertilizer and LARGER PLOT.",
         "COLLECTION:  The first time you harvest a flower it is unlocked forever in FLOWERS. Flowers that died do not count.",
-        "SAVING:  The game saves automatically (and when you press SAVE or BACK). Every garden is its own save slot: NEW starts a fresh garden, LOAD continues one you made earlier."
+        "SAVING:  The game saves automatically (and when you press SAVE or BACK). Every garden is its own save slot: NEW starts a fresh garden, LOAD continues one you made earlier.",
+        "SOUND:  Music and sound effects can be switched off with the SOUND button in the garden."
     };
+
+    /** e.g. "Common $5, Rare $25, Legendary $100" - read from Rarity so it never goes out of date. */
+    private static String priceList() {
+        StringBuilder sb = new StringBuilder();
+        for (Rarity r : Rarity.values()) sb.append(sb.length() == 0 ? "" : ", ").append(r.label).append(" $").append(r.reward);
+        return sb.toString();
+    }
     private final PixelButton back;
 
     public HowToPlayPanel(GameFrame frame) {
@@ -40,13 +47,13 @@ public class HowToPlayPanel extends ScreenPanel {
             g.setFont(GameRenderer.font(size));
             fm = g.getFontMetrics();
             int total = 0;
-            for (String step : STEPS) total += wrap(step, fm, maxW).size() * fm.getHeight() + (int) (fm.getHeight() * 0.4);
+            for (String step : STEPS) total += GameRenderer.wrap(step, fm, maxW).size() * fm.getHeight() + (int) (fm.getHeight() * 0.4);
             if (total <= availH || size <= 9) break;
             size -= 1;
         }
         int y = top;
         for (String step : STEPS) {
-            List<String> lines = wrap(step, fm, maxW);
+            List<String> lines = GameRenderer.wrap(step, fm, maxW);
             for (int i = 0; i < lines.size(); i++) {
                 g.setColor(new Color(0x3B2B1D));
                 g.drawString((i > 0 ? "    " : "") + lines.get(i), x, y);
@@ -54,17 +61,5 @@ public class HowToPlayPanel extends ScreenPanel {
             }
             y += fm.getHeight() * 0.4;
         }
-    }
-
-    private static List<String> wrap(String text, FontMetrics fm, int maxW) {
-        List<String> lines = new ArrayList<>();
-        StringBuilder cur = new StringBuilder();
-        for (String word : text.split(" ")) {
-            String test = cur.length() == 0 ? word : cur + " " + word;
-            if (fm.stringWidth(test) > maxW && cur.length() > 0) { lines.add(cur.toString()); cur = new StringBuilder(word); }
-            else cur = new StringBuilder(test);
-        }
-        if (cur.length() > 0) lines.add(cur.toString());
-        return lines;
     }
 }

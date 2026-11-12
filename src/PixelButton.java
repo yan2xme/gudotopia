@@ -22,7 +22,7 @@ public class PixelButton extends JComponent {
                 boolean fire = pressed && contains(e.getPoint());
                 pressed = false;
                 repaint();
-                if (fire && isEnabled()) PixelButton.this.action.run();
+                if (fire && isEnabled()) { AudioManager.getInstance().play("click"); PixelButton.this.action.run(); }
             }
         });
     }

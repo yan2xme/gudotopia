@@ -7,8 +7,8 @@ public class GameTest {
 
     static long[] clock = {1_700_000_000_000L};                  // fake "now" in ms - tests move it forward
     static PlayerData newGame() { PlayerData d = new PlayerData(); d.setClock(() -> clock[0]); d.setMoney(1000); return d; }
-    static Flower common() { return FlowerRegistry.byId("flower_03"); }   // Clover, Common, 10 s
-    static Flower rose() { return FlowerRegistry.byId("flower_18"); }
+    static Flower common() { return FlowerRegistry.byId("daisy"); }   // Common, 10 s
+    static Flower rare() { return FlowerRegistry.byId("brent"); }     // Rare, 18 s
     static Fertilizer worm() { return FertilizerRegistry.byId("fert_worm"); }
     static Fertilizer manure() { return FertilizerRegistry.byId("fert_manure"); }
 
@@ -22,7 +22,9 @@ public class GameTest {
 
     public static void main(String[] a) {
         // ---------------- definitions ----------------
-        check(FlowerRegistry.ALL.size() == 30, "30 flowers still defined");
+        check(FlowerRegistry.ALL.size() == 12, "12 flowers defined");
+        int[] tiers = new int[Rarity.values().length]; for (Flower f : FlowerRegistry.ALL) tiers[f.rarity.ordinal()]++;
+        check(tiers[Rarity.COMMON.ordinal()] == 5 && tiers[Rarity.RARE.ordinal()] == 4 && tiers[Rarity.LEGENDARY.ordinal()] == 3, "5 Common / 4 Rare / 3 Legendary");
         int sum = 0; for (Rarity r : Rarity.values()) sum += r.dropPercent;
         check(sum == 100, "seed drop rates total 100");
         check(FertilizerRegistry.ALL.size() >= 2 && worm().growthBonus > 0 && manure().growthBonus > worm().growthBonus, "Manure is stronger than Worm fertilizer");
@@ -118,15 +120,15 @@ public class GameTest {
         // ---------------- harvest ----------------
         clock[0] = 1_700_000_000_000L;
         d = newGame(); d.getFertilizers().add(worm()); d.water(0, 0); d.applyFertilizer(0, 0, worm());
-        d.getSeeds().add(rose()); d.plant(0, 0); t0 = clock[0];
+        d.getSeeds().add(rare()); d.plant(0, 0); t0 = clock[0];
         check(!d.harvest(0, 0).ok, "cannot harvest an immature flower");
-        clock[0] = t0 + rose().growthMillis(); d.update();
+        clock[0] = t0 + rare().growthMillis(); d.update();
         int m0 = d.getMoney();
         PlayerData.Result h = d.harvest(0, 0);
-        check(h.ok && h.newDiscovery && d.getMoney() == m0 + rose().reward && d.isUnlocked(rose()), "harvest pays reward and unlocks the flower");
+        check(h.ok && h.newDiscovery && d.getMoney() == m0 + rare().reward && d.isUnlocked(rare()), "harvest pays reward and unlocks the flower");
         check(d.getPlot(0, 0).isEmpty() && !d.getPlot(0, 0).isWatered() && d.getPlot(0, 0).getFertilizer() == null, "harvest resets watering + fertilizer");
         check(!d.harvest(0, 0).ok, "cannot harvest an empty plot");
-        prepare(d, 0, 0, rose()); clock[0] += rose().growthMillis(); d.update();
+        prepare(d, 0, 0, rare()); clock[0] += rare().growthMillis(); d.update();
         PlayerData.Result h2 = d.harvest(0, 0);
         check(h2.ok && !h2.newDiscovery && d.unlockedCount() == 1, "repeat harvest: money but no new discovery");
 
@@ -138,7 +140,7 @@ public class GameTest {
         check(!newGame().water(5, 5).ok, "plots outside the garden cannot be used");
 
         // ---------------- weighted random planting ----------------
-        Flower clover = FlowerRegistry.byId("flower_03"), roseF = FlowerRegistry.byId("flower_18"), sun = FlowerRegistry.byId("flower_13");
+        Flower clover = FlowerRegistry.byId("daisy"), roseF = FlowerRegistry.byId("rose"), sun = FlowerRegistry.byId("sunflower");
         Map<String, Integer> picks = new HashMap<>();
         int N = 60_000; boolean invOk = true;
         Random rng = new Random(7);
@@ -150,7 +152,7 @@ public class GameTest {
             picks.merge(f.id, 1, Integer::sum);
         }
         double pc = picks.get(clover.id) * 100.0 / N, pr = picks.get(roseF.id) * 100.0 / N, ps = picks.get(sun.id) * 100.0 / N;
-        System.out.printf("      3 Clover / 2 Rose / 1 Sunflower -> %.1f%% / %.1f%% / %.1f%%  (expected 50 / 33.3 / 16.7)%n", pc, pr, ps);
+        System.out.printf("      3 Daisy / 2 Rose / 1 Sunflower -> %.1f%% / %.1f%% / %.1f%%  (expected 50 / 33.3 / 16.7)%n", pc, pr, ps);
         check(invOk, "planting removes exactly one seed from the inventory");
         check(Math.abs(pc - 50) < 1.2 && Math.abs(pr - 33.3) < 1.2 && Math.abs(ps - 16.7) < 1.2, "random planting is weighted by quantity");
         check(new SeedInventory().takeRandom(rng) == null, "empty inventory gives no seed");

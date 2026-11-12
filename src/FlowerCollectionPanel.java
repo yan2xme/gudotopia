@@ -22,7 +22,7 @@ public class FlowerCollectionPanel extends ScreenPanel {
     }
 
     @Override public void doLayout() {
-        back.setBounds(16, 16, (int) (getWidth() * 0.15) + 4, (int) (getHeight() * 0.09) + 4);
+        back.setBounds(16, 16, (int) (getWidth() * 0.17) + 4, (int) (getHeight() * 0.10) + 4);
     }
 
     // ---- grid geometry (shared by painting and hit testing) ----
@@ -31,7 +31,7 @@ public class FlowerCollectionPanel extends ScreenPanel {
     private void computeGrid() {
         int w = getWidth(), h = getHeight(), n = FlowerRegistry.ALL.size();
         gap = Math.max(6, w / 120);
-        int areaX = (int) (w * 0.04), areaY = (int) (h * 0.19), areaW = (int) (w * 0.92), areaH = (int) (h * 0.67);
+        int areaX = (int) (w * 0.04), areaY = (int) (h * 0.20), areaW = (int) (w * 0.92), areaH = (int) (h * 0.65);
         double best = -1;
         for (int c = 4; c <= 10; c++) {
             int rows = (n + c - 1) / c;
@@ -66,6 +66,9 @@ public class FlowerCollectionPanel extends ScreenPanel {
         g.setColor(new Color(0x3A3F55)); g.fillRect(bx, by, bw, bh);
         g.setColor(new Color(0xFFD23F)); g.fillRect(bx, by, bw * found / total, bh);
 
+        float nameSize = cardH * 0.13f;                       // one text size for all cards: the longest name decides
+        for (Flower f : all) nameSize = Math.min(nameSize, GameRenderer.fitSize(g, f.name, cardH * 0.13f, cardW - 16));
+
         for (int i = 0; i < all.size(); i++) {
             Flower f = all.get(i);
             boolean open = data.isUnlocked(f);
@@ -77,32 +80,36 @@ public class FlowerCollectionPanel extends ScreenPanel {
                 g.setColor(f.rarity.color);
                 g.fillRect(x + 4, y + cardH - 10, cardW - 8, 6);
             }
-            int img = (int) Math.min(cardW * 0.62, cardH * 0.50);
+            int img = (int) Math.min(cardW * 0.74, cardH * 0.56);
             PixelArt.draw(g, open ? PixelArt.head(f) : PixelArt.lockedHead(f), x + (cardW - img) / 2.0, y + cardH * 0.07, img, img);
             if (!open) GameRenderer.text(g, "?", x + cardW / 2, (int) (y + cardH * 0.07 + img * 0.68), img * 0.55f, new Color(0xB9C0DA), null, 0);
             int ty = (int) (y + cardH * 0.07 + img + cardH * 0.15);
             if (open) {
-                float ns = GameRenderer.fitSize(g, f.name, cardH * 0.13f, cardW - 10);
-                GameRenderer.text(g, f.name, x + cardW / 2, ty, ns, new Color(0x2B1D1D), null, 0);
-                float rs = GameRenderer.fitSize(g, f.rarity.label, cardH * 0.11f, cardW - 10);
-                GameRenderer.text(g, f.rarity.label, x + cardW / 2, ty + (int) (cardH * 0.13), rs, f.rarity.color.darker(), null, 0);
+                GameRenderer.text(g, f.name, x + cardW / 2, ty, nameSize, new Color(0x2B1D1D), null, 0);
+                GameRenderer.text(g, f.rarity.label, x + cardW / 2, ty + (int) (cardH * 0.13), nameSize * 0.85f, f.rarity.color.darker(), null, 0);
             } else {
-                GameRenderer.text(g, "???", x + cardW / 2, ty, cardH * 0.13f, new Color(0xD5DAEE), null, 0);
-                GameRenderer.text(g, "Locked", x + cardW / 2, ty + (int) (cardH * 0.13), cardH * 0.1f, new Color(0xA9B0CC), null, 0);
+                GameRenderer.text(g, "???", x + cardW / 2, ty, nameSize, new Color(0xD5DAEE), null, 0);
+                GameRenderer.text(g, "Locked", x + cardW / 2, ty + (int) (cardH * 0.13), nameSize * 0.85f, new Color(0xA9B0CC), null, 0);
             }
         }
 
-        // detail bar for the hovered flower
-        String detail = "Hover over a flower to see its details.";
+        // detail bar for the hovered flower: facts on the first line, description on the second
+        String line1 = "Hover over a flower to see its details.", line2 = "";
         if (hover >= 0) {
             Flower f = all.get(hover);
-            detail = data.isUnlocked(f)
-                    ? f.name + " (" + f.rarity.label + ")  -  sells for $" + f.reward + ", grows in " + f.growthSeconds + "s.  " + f.description
-                    : "??? (" + f.rarity.label + ")  -  not discovered yet. Harvest this flower once to unlock it!";
+            boolean open = data.isUnlocked(f);
+            line1 = open ? f.name + " (" + f.rarity.label + ")  -  sells for $" + f.reward + ", grows in " + f.growthSeconds + "s"
+                         : "??? (" + f.rarity.label + ")";
+            line2 = open ? f.description : "Not discovered yet. Harvest this flower once to unlock it!";
         }
-        int dh = (int) (h * 0.075), dy = (int) (h * 0.89);
+        int dh = (int) (h * 0.095), dy = (int) (h * 0.88), maxW = (int) (w * 0.89);
         GameRenderer.box(g, (int) (w * 0.04), dy, (int) (w * 0.92), dh, new Color(0xFFF1CF), 4);
-        float ds = GameRenderer.fitSize(g, detail, h * 0.028f, (int) (w * 0.89));
-        GameRenderer.text(g, detail, w / 2, dy + dh / 2 + (int) (ds * 0.33), ds, new Color(0x3B2B1D), null, 0);
+        float s1 = GameRenderer.fitSize(g, line1, h * 0.028f, maxW), s2 = GameRenderer.fitSize(g, line2, h * 0.024f, maxW);
+        if (line2.isEmpty()) {
+            GameRenderer.text(g, line1, w / 2, dy + dh / 2 + (int) (s1 * 0.33), s1, new Color(0x3B2B1D), null, 0);
+        } else {
+            GameRenderer.text(g, line1, w / 2, dy + (int) (dh * 0.42), s1, new Color(0x3B2B1D), null, 0);
+            GameRenderer.text(g, line2, w / 2, dy + (int) (dh * 0.78), s2, new Color(0x6B5A45), null, 0);
+        }
     }
 }

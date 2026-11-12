@@ -33,7 +33,7 @@ public abstract class ItemDialog extends JPanel {
     private Entry lastEntry;                    // what the latest purchase gave
     private int scrollRows, hoverIndex = -1;
     private Rectangle dlg = new Rectangle(), grid = new Rectangle();
-    private static final int PAD = 18, CELL_W = 86, CELL_H = 94, GAP = 8;
+    private static final int PAD = 18, CELL_W = 96, CELL_H = 94, GAP = 8;
 
     protected ItemDialog(GardenPanel owner, PlayerData data) {
         this.owner = owner;
@@ -48,7 +48,12 @@ public abstract class ItemDialog extends JPanel {
         MouseAdapter m = new MouseAdapter() {   // having listeners also stops clicks from reaching the garden below
             @Override public void mousePressed(MouseEvent e) { clickCell(e.getPoint()); }
             @Override public void mouseMoved(MouseEvent e) { hoverIndex = cellAt(e.getPoint()); repaint(); }
-            @Override public void mouseWheelMoved(MouseWheelEvent e) { scrollRows = Math.max(0, scrollRows + e.getWheelRotation()); repaint(); }
+            @Override public void mouseExited(MouseEvent e) { hoverIndex = -1; repaint(); }
+            @Override public void mouseWheelMoved(MouseWheelEvent e) {
+                scrollRows = Math.max(0, scrollRows + e.getWheelRotation());
+                hoverIndex = cellAt(e.getPoint());
+                repaint();
+            }
         };
         addMouseListener(m); addMouseMotionListener(m); addMouseWheelListener(m);
     }
@@ -65,13 +70,13 @@ public abstract class ItemDialog extends JPanel {
     /** Called when the player clicks an item in the grid; return true to close the dialog afterwards. */
     protected boolean onEntryClicked(Entry e) { return false; }
 
-    public void open() { scrollRows = 0; lastEntry = null; setVisible(true); repaint(); }
+    public void open() { scrollRows = 0; hoverIndex = -1; lastEntry = null; setVisible(true); repaint(); }
     private void closeDialog() { setVisible(false); owner.repaint(); }
 
     private void buyOne() {
         PlayerData.Result r = doBuy();
-        if (r.ok) { lastEntry = entryFor(r); owner.autosave(); }
-        else owner.toast(r.message, true);
+        if (r.ok) { lastEntry = entryFor(r); owner.autosave(); AudioManager.getInstance().play("buy"); }
+        else { owner.toast(r.message, true); AudioManager.getInstance().play("error"); }
         repaint();
     }
 
@@ -99,7 +104,7 @@ public abstract class ItemDialog extends JPanel {
         buy.setLabel(buyLabel());
         buy.setBounds(dlg.x + PAD, dlg.y + 76, leftW - PAD, 58);
         close.setBounds(dlg.x + dw / 2 - 75, dlg.y + dh - 62, 150, 50);
-        grid = new Rectangle(dlg.x + leftW + PAD, dlg.y + 104, dw - leftW - PAD * 2, dh - 104 - 74);
+        grid = new Rectangle(dlg.x + leftW + PAD, dlg.y + 104, dw - leftW - PAD * 2, dh - 104 - 96);   // room for the detail line above CLOSE
     }
 
     @Override protected void paintComponent(Graphics g0) {
@@ -112,21 +117,24 @@ public abstract class ItemDialog extends JPanel {
 
         int leftW = (int) (dlg.width * 0.36);
         // --- card with the item you just received
-        int cx = dlg.x + PAD, cy = dlg.y + 146, cw = leftW - PAD, ch = 108;
+        int cx = dlg.x + PAD, cy = dlg.y + 146, cw = leftW - PAD, ch = 124;
         GameRenderer.box(g, cx, cy, cw, ch, Color.WHITE, 4);
         if (lastEntry == null) {
             GameRenderer.text(g, "Buy one to see", cx + cw / 2, cy + ch / 2 - 4, 15, new Color(0x555555), null, 0);
             GameRenderer.text(g, "what you get!", cx + cw / 2, cy + ch / 2 + 16, 15, new Color(0x555555), null, 0);
         } else {
-            lastEntry.icon.paint(g, cx + 12, cy + 18, 64);
-            float ns = GameRenderer.fitSize(g, lastEntry.name, 18, cw - 100);
-            GameRenderer.text(g, lastEntry.name, cx + 86, cy + 44, ns, new Color(0x2B1D1D), null, -1);
-            GameRenderer.text(g, lastEntry.rarity.label, cx + 86, cy + 68, 16, lastEntry.rarity.color.darker(), null, -1);
-            if (!lastEntry.detail.isEmpty()) {
-                float ds = GameRenderer.fitSize(g, lastEntry.detail, 12, cw - 96);
-                GameRenderer.text(g, lastEntry.detail, cx + 86, cy + 90, ds, new Color(0x4A6A3A), null, -1);
+            GameRenderer.text(g, "You got:", cx + 12, cy + 22, 12, new Color(0x777777), null, -1);
+            lastEntry.icon.paint(g, cx + 12, cy + 32, 76);
+            int tx = cx + 100, textW = cw - 112;                      // text column to the right of the picture
+            float ns = GameRenderer.fitSize(g, lastEntry.name, 18, textW);
+            GameRenderer.text(g, lastEntry.name, tx, cy + 52, ns, new Color(0x2B1D1D), null, -1);
+            GameRenderer.text(g, lastEntry.rarity.label, tx, cy + 73, 15, lastEntry.rarity.color.darker(), null, -1);
+            g.setFont(GameRenderer.font(11));
+            int ly = cy + 92;
+            for (String line : GameRenderer.wrap(lastEntry.detail, g.getFontMetrics(), textW)) {
+                GameRenderer.text(g, line, tx, ly, 11, new Color(0x4A6A3A), null, -1);
+                ly += 14;
             }
-            GameRenderer.text(g, "You got:", cx + 10, cy + 16, 12, new Color(0x777777), null, -1);
         }
         // --- drop chances
         int ry = cy + ch + 26;
@@ -157,18 +165,20 @@ public abstract class ItemDialog extends JPanel {
             int col = i % cols, row = i / cols - scrollRows;
             int x = grid.x + col * (CELL_W + GAP), y = grid.y + row * (CELL_H + GAP);
             GameRenderer.box(g, x, y, CELL_W, CELL_H, i == hoverIndex ? new Color(0xFFF7DD) : Color.WHITE, 3);
-            e.icon.paint(g, x + (CELL_W - 48) / 2.0, y + 8, 48);
+            e.icon.paint(g, x + 8, y + 10, 48);                          // picture on the left, "xN" beside it
             float ns = GameRenderer.fitSize(g, e.name, 12, CELL_W - 8);
             GameRenderer.text(g, e.name, x + CELL_W / 2, y + 70, ns, new Color(0x2B1D1D), null, 0);
             g.setColor(e.rarity.color);
             g.fillRect(x + 6, y + CELL_H - 14, CELL_W - 12, 6);
-            GameRenderer.text(g, "x" + e.count, x + CELL_W - 8, y + 24, 14, Color.WHITE, GameRenderer.BLACK, 1);
+            float cs = GameRenderer.fitSize(g, "x" + e.count, 14, CELL_W - 66);
+            GameRenderer.text(g, "x" + e.count, x + CELL_W - 8, y + 40, cs, new Color(0x3B2B1D), null, 1);
         }
         g.setClip(oldClip);
         if (hoverIndex >= 0 && hoverIndex < owned.size() && !owned.get(hoverIndex).detail.isEmpty()) {
             Entry e = owned.get(hoverIndex);
-            float ds = GameRenderer.fitSize(g, e.name + ": " + e.detail, 12, grid.width - 80);
-            GameRenderer.text(g, e.name + ": " + e.detail, grid.x, grid.y + grid.height + 14, ds, new Color(0x3B2B1D), null, -1);
+            String info = e.name + " (" + e.rarity.label + "): " + e.detail;
+            float ds = GameRenderer.fitSize(g, info, 12, grid.width - 80);
+            GameRenderer.text(g, info, grid.x, grid.y + grid.height + 14, ds, new Color(0x3B2B1D), null, -1);
         }
         if (maxScroll > 0) GameRenderer.text(g, "scroll", grid.x + grid.width, grid.y + grid.height + 14, 11, new Color(0x777777), null, 1);
         g.dispose();

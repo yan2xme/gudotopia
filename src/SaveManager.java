@@ -17,14 +17,11 @@ import java.util.regex.Pattern;
  */
 public class SaveManager {
     public static final int MAX_NAME_LENGTH = 20;
-    private static final String DEFAULT_LEGACY_NAME = "Migrated Garden";
     private static final Pattern NAME_PATTERN = Pattern.compile("[\\p{L}\\p{N} _'.-]+");
     private static final Pattern FILE_PATTERN = Pattern.compile("save_(\\d+)\\.properties");
 
     private final Path dir;          // ~/.gudotopia
     private final Path savesDir;     // ~/.gudotopia/saves
-    private final Path legacyFile;   // ~/.gudotopia/save.properties (the very first, single-save format)
-    private String startupMessage;   // result of the one-time import of the old file, shown to the player once
 
     /** Folder that holds everything: ~/.gudotopia (or -Dgudotopia.dir=... for experiments). */
     public static Path defaultDir() {
@@ -45,19 +42,15 @@ public class SaveManager {
     SaveManager(Path dir) {
         this.dir = dir;
         this.savesDir = dir.resolve("saves");
-        this.legacyFile = dir.resolve("save.properties");
         try {
             Files.createDirectories(savesDir);
         } catch (Exception e) {
             throw new SaveException("Could not create the save folder " + savesDir + ": " + e.getMessage(), e);
         }
-        migrateLegacyIfNeeded();
     }
 
     public Path getSavesFolder() { return savesDir; }
     public Path getSaveFile(long id) { return savesDir.resolve("save_" + id + ".properties"); }
-    /** A message about the old-save import (success or failure), or null. Cleared after it is read. */
-    public String takeStartupMessage() { String m = startupMessage; startupMessage = null; return m; }
 
     // =====================================================================================================
     //  Save names
@@ -92,7 +85,8 @@ public class SaveManager {
             try {
                 Properties p = readProps(getSaveFile(id));
                 String collection = p.getProperty("collection", "");
-                int discovered = collection.isBlank() ? 0 : collection.split(",").length;
+                int discovered = 0;                          // only flowers that still exist in the game
+                for (String fid : collection.split(",")) if (FlowerRegistry.byId(fid.trim()) != null) discovered++;
                 list.add(new SaveInfo(id, p.getProperty("name", "?"), num(p, "createdAt", 0), num(p, "lastPlayed", 0),
                         (int) num(p, "money", 0), (int) num(p, "gardenSize", PlayerData.START_SIZE), discovered));
             } catch (Exception e) {
@@ -244,36 +238,5 @@ public class SaveManager {
         }
         Collections.sort(ids);
         return ids;
-    }
-
-    // =====================================================================================================
-    //  One-time import of the very first single-save file (~/.gudotopia/save.properties)
-    // =====================================================================================================
-
-    /**
-     * Imports the old save.properties as a new save slot - but only when the file exists and there are no
-     * saves yet. It never overwrites a save. After a successful import the old file is renamed to
-     * save.properties.migrated.bak (a backup, and it can never be imported twice). On failure the original
-     * file is left exactly as it was and a message is stored for the player.
-     */
-    private void migrateLegacyIfNeeded() {
-        if (!Files.isRegularFile(legacyFile) || !existingIds().isEmpty()) return;
-        try {
-            long now = System.currentTimeMillis();
-            PlayerData d;
-            try { d = LegacyMigrator.read(legacyFile, now); }
-            catch (Exception e) { throw new SaveException("the old save file could not be read (" + e + ")", e); }
-            createSaveFile(DEFAULT_LEGACY_NAME, d, now);
-            Path backup = legacyFile.resolveSibling("save.properties.migrated.bak");
-            try {
-                Files.move(legacyFile, backup, StandardCopyOption.REPLACE_EXISTING);
-                startupMessage = "Your old save was imported as \"" + DEFAULT_LEGACY_NAME + "\".\nThe original file was kept as " + backup.getFileName() + ".";
-            } catch (Exception e) {
-                startupMessage = "Your old save was imported as \"" + DEFAULT_LEGACY_NAME + "\", but the old file could not be renamed: " + e.getMessage();
-            }
-        } catch (Exception e) {
-            startupMessage = "Could not import your old save: " + e.getMessage() + "\nThe original file was NOT changed: " + legacyFile;
-            System.err.println(startupMessage);
-        }
     }
 }

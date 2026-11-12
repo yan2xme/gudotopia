@@ -1,21 +1,21 @@
 import java.awt.Color;
 
 /**
- * Immutable definition of one collectible flower (= one classmate).
+ * Immutable definition of one collectible flower.
+ * Its face is the picture assets/flowers/<id>.png when that file exists (the classmates); otherwise a cute
+ * face is drawn in code from skin / hair / hairStyle (the common flowers).
  * Whether the player has unlocked it is stored in PlayerData, not here.
  */
 public final class Flower {
-    public final String id;           // e.g. "flower_01" - also the image file name (assets/faces/flower_01.png)
+    public final String id;           // e.g. "daisy", "klent" - also the image file name
     public final String name;
     public final String description;
     public final Rarity rarity;
     public final int growthSeconds;
     public final int reward;
-    public final Color petalColor;
-    // Look of the generated placeholder face (used when no image file is supplied)
-    public final Color skin;
-    public final Color hair;
-    public final int hairStyle;
+    public final Color petalColor;    // petals and bud
+    public final Color skin, hair;    // look of the drawn face
+    public final int hairStyle;       // 0..3, see PixelArt.drawnFace
 
     public Flower(String id, String name, String description, Rarity rarity,
                   Color petalColor, Color skin, Color hair, int hairStyle) {

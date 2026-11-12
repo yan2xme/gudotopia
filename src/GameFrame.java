@@ -38,17 +38,12 @@ public class GameFrame extends JFrame {
         setMinimumSize(new Dimension(900, 600));
         setLocationRelativeTo(null);
         showMenu();
+        AudioManager.getInstance().playMusic("bgm");
     }
 
     public SaveManager saves() { return saveManager; }
     public PlayerData getData() { return data; }
     public String getLastSaveError() { return lastSaveError; }
-
-    /** Shows the result of the old save.properties import (if any). Call after the window is visible. */
-    public void showStartupMessage() {
-        String msg = saveManager.takeStartupMessage();
-        if (msg != null) JOptionPane.showMessageDialog(this, msg, "Gudotopia", JOptionPane.INFORMATION_MESSAGE);
-    }
 
     // ------------------------------------------------------------------ saving / switching games
     /** Writes the open game to its save file. Returns false (and remembers the reason) if that failed - progress stays in memory. */

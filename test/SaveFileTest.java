@@ -41,9 +41,9 @@ public class SaveFileTest {
         long[] clk = {System.currentTimeMillis() - 5_000};
         a.setClock(() -> clk[0]);
         a.setMoney(500); a.setGardenSize(4);
-        a.getSeeds().add("flower_03", 3); a.getSeeds().add("flower_18", 2);
+        a.getSeeds().add("daisy", 3); a.getSeeds().add("brent", 2);
         a.getFertilizers().add(FertilizerRegistry.byId("fert_worm")); a.getFertilizers().add(FertilizerRegistry.byId("fert_manure"));
-        a.unlock("flower_01"); a.unlock("flower_05");
+        a.unlock("tulip"); a.unlock("lily");
         a.water(0, 0);                                                    // watered, empty
         a.water(0, 1); a.applyFertilizer(0, 1, FertilizerRegistry.byId("fert_worm"));   // watered + fertilizer, empty
         a.water(1, 1); a.plant(1, 1);                                     // planted, growing
@@ -59,7 +59,7 @@ public class SaveFileTest {
         check(betaPlotsClean, "Beta's garden plots are all still dry and empty");
 
         // change Beta, then verify Alpha is unaffected
-        b2.setMoney(42); b2.getSeeds().add("flower_30", 1); b2.unlock("flower_30"); b2.water(2, 2);
+        b2.setMoney(42); b2.getSeeds().add("gudo", 1); b2.unlock("gudo"); b2.water(2, 2);
         sm.save(b2);
 
         // ============ "restart the application": brand-new SaveManager, then load ============
@@ -70,17 +70,17 @@ public class SaveFileTest {
         check(ia.money() == 500 && ia.gardenSize() == 4 && ia.discovered() == 2 && ia.lastPlayed() > 0, "list shows name/money/garden size/discovered/last played");
         PlayerData al = sm2.loadSave(a.getSaveId());
         check(al.getSaveName().equals("Alpha") && al.getMoney() == 500 && al.getGardenSize() == 4, "Alpha restored: name, money, garden size");
-        int sc = al.getSeeds().count(f("flower_03")) + al.getSeeds().count(f("flower_18"));
+        int sc = al.getSeeds().count(f("daisy")) + al.getSeeds().count(f("brent"));
         check(sc == 4, "Alpha restored: seed inventory (5 owned - 1 planted = 4)");
         check(al.getFertilizers().count(FertilizerRegistry.byId("fert_manure")) == 1 && al.getFertilizers().count(FertilizerRegistry.byId("fert_worm")) == 0, "Alpha restored: fertilizer inventory (worm used on plot, manure left)");
-        check(al.isUnlocked(f("flower_01")) && al.isUnlocked(f("flower_05")) && al.unlockedCount() == 2 && !al.isUnlocked(f("flower_30")), "Alpha restored: its own collection only");
+        check(al.isUnlocked(f("tulip")) && al.isUnlocked(f("lily")) && al.unlockedCount() == 2 && !al.isUnlocked(f("gudo")), "Alpha restored: its own collection only");
         check(al.getPlot(0, 0).isWatered() && al.getPlot(0, 0).isEmpty(), "watering status of an empty plot persists");
         check(al.getPlot(0, 1).isWatered() && al.getPlot(0, 1).getFertilizer() != null && al.getPlot(0, 1).getFertilizer().id.equals("fert_worm"), "fertilizer effect on an empty plot persists");
         check(!al.getPlot(1, 1).isEmpty() && al.getPlot(1, 1).getFlower().id.equals(plantedId) && al.getPlot(1, 1).isWatered(), "planted flower persists with watered soil");
         check(al.getPlot(1, 1).getGrowthMs() > 0, "growth progress persists");
         PlayerData bl = sm2.loadSave(b.getSaveId());
-        check(bl.getMoney() == 42 && bl.getSeeds().count(f("flower_30")) == 1 && bl.isUnlocked(f("flower_30")) && bl.getPlot(2, 2).isWatered(), "Beta restored its own changes");
-        check(bl.getFertilizers().total() == 0 && !bl.isUnlocked(f("flower_01")) && bl.getGardenSize() == 3, "Beta has none of Alpha's data");
+        check(bl.getMoney() == 42 && bl.getSeeds().count(f("gudo")) == 1 && bl.isUnlocked(f("gudo")) && bl.getPlot(2, 2).isWatered(), "Beta restored its own changes");
+        check(bl.getFertilizers().total() == 0 && !bl.isUnlocked(f("tulip")) && bl.getGardenSize() == 3, "Beta has none of Alpha's data");
 
         // ============ the file really is readable text ============
         var pa = props(sm2, a.getSaveId());
@@ -92,13 +92,13 @@ public class SaveFileTest {
         check(files(dir) == filesBefore && !Files.exists(sm2.getSaveFile(a.getSaveId()).resolveSibling("save_" + a.getSaveId() + ".properties.tmp")), "saving repeatedly rewrites the same file (no new files, no leftovers)");
         al.getSeeds().takeRandom(new Random()); sm2.save(al);          // inventory shrinks -> stored quantity must shrink too
         check(sm2.loadSave(a.getSaveId()).getSeeds().total() == 3, "using a seed lowers the stored quantity");
-        PlayerData emptied = sm2.loadSave(b.getSaveId()); emptied.getSeeds().take(f("flower_30")); sm2.save(emptied);
+        PlayerData emptied = sm2.loadSave(b.getSaveId()); emptied.getSeeds().take(f("gudo")); sm2.save(emptied);
         check(sm2.loadSave(b.getSaveId()).getSeeds().total() == 0, "using the last seed of a type removes it (quantity 0)");
 
         // ============ growth + death timing across a restart ============
         long now = System.currentTimeMillis();
         PlayerData t = sm2.createSave("Timing");
-        Flower fc = f("flower_03"); long grow = fc.growthMillis();      // Clover: 10 s to grow
+        Flower fc = f("daisy"); long grow = fc.growthMillis();      // Daisy: 10 s to grow
         // Build the game as it was 45 s ago, when it was saved and the app was closed:
         PlayerData tOld = new PlayerData(); tOld.setSaveInfo(t.getSaveId(), "Timing"); tOld.setMoney(t.getMoney());
         tOld.setClock(() -> now - 45_000);
@@ -139,35 +139,6 @@ public class SaveFileTest {
         bm.save(bm.loadSave(good.getSaveId()));
         check(Arrays.equals(Files.readAllBytes(badFile), garbage), "the damaged file is left untouched (never silently erased)");
         rmrf(badDir);
-
-        // ============ migration from save.properties ============
-        Path md = tempDir();
-        String legacy = "#Gudotopia save\nversion=1\nmoney=777\ngardenSize=4\nsavedAt=" + (now - 3_600_000) + "\n" +
-                "seed.flower_18=2\nseed.flower_03=1\nselectedSeed=flower_18\nunlocked=flower_01,flower_30\n" +
-                "plot.1.2=flower_05\\:4000\nplot.0.0=flower_03\\:999999\n";
-        Files.writeString(md.resolve("save.properties"), legacy);
-        SaveManager ms = new SaveManager(md);
-        List<SaveInfo> msaves = ms.listSaves();
-        check(msaves.size() == 1 && msaves.get(0).name().equals("Migrated Garden"), "old save.properties imported as one save with a default name");
-        PlayerData mg = ms.loadSave(msaves.get(0).id());
-        check(mg.getMoney() == 777 && mg.getGardenSize() == 4 && mg.getSeeds().count(f("flower_18")) == 2 && mg.getSeeds().count(f("flower_03")) == 1, "migrated: money, garden size, seeds");
-        check(mg.isUnlocked(f("flower_01")) && mg.isUnlocked(f("flower_30")) && mg.unlockedCount() == 2, "migrated: unlocked flowers");
-        check(!mg.getPlot(1, 2).isEmpty() && mg.getPlot(1, 2).getFlower().id.equals("flower_05") && mg.getPlot(1, 2).isWatered() && mg.getPlot(1, 2).getGrowthMs() >= 4000, "migrated: planted flower with growth progress (soil counts as watered)");
-        check(!mg.getPlot(0, 0).isEmpty() && mg.getPlot(0, 0).isMature(), "migrated: a ripe flower survives (grace period) instead of dying at once");
-        check(!Files.exists(md.resolve("save.properties")) && Files.readString(md.resolve("save.properties.migrated.bak")).equals(legacy), "original file preserved unchanged as save.properties.migrated.bak");
-        check(ms.takeStartupMessage() != null, "player gets a message about the import");
-        SaveManager ms2 = new SaveManager(md);
-        check(ms2.listSaves().size() == 1, "reopening does not import it a second time");
-        Files.writeString(md.resolve("save.properties"), legacy);       // someone puts the old file back
-        SaveManager ms3 = new SaveManager(md);
-        check(ms3.listSaves().size() == 1 && Files.exists(md.resolve("save.properties")), "existing saves are never overwritten/extended by an old file; the file is left alone");
-        rmrf(md);
-
-        Path cd = tempDir();
-        Files.writeString(cd.resolve("save.properties"), "money=notanumber\ngardenSize=%%%\n");
-        SaveManager cs = new SaveManager(cd);
-        check(cs.listSaves().isEmpty() && Files.exists(cd.resolve("save.properties")) && cs.takeStartupMessage() != null, "corrupt old file: error reported, original file preserved, no save created");
-        rmrf(cd);
 
         rmrf(dir);
         System.out.println(fails == 0 ? "\nALL SAVE-FILE TESTS PASSED" : "\n" + fails + " TEST(S) FAILED");

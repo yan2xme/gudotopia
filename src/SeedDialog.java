@@ -13,7 +13,7 @@ public class SeedDialog extends ItemDialog {
     @Override protected PlayerData.Result doBuy() { return data.buySeed(); }
 
     private Entry entryOf(Flower f, int count) {
-        return new Entry(f.name, f.rarity.label + ", sells for $" + f.reward + ", grows in " + f.growthSeconds + "s", f.rarity, count, f,
+        return new Entry(f.name, "Sells for $" + f.reward + ", grows in " + f.growthSeconds + "s", f.rarity, count, f,
                 (g, x, y, size) -> PixelArt.draw(g, PixelArt.head(f), x, y, size, size));
     }
 
