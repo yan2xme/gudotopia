@@ -3,6 +3,7 @@ import java.awt.*;
 import java.awt.event.*;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Path2D;
+import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -372,6 +373,7 @@ public class GardenPanel extends ScreenPanel {
                 g.setColor(GameRenderer.BLACK); g.fillRect(px - 1, py - 1, dot + 2, dot + 2);
                 g.setColor(p.getFertilizer().color); g.fillRect(px, py, dot, dot);
             }
+            if (p.getFertilizer().id.equals("fert_worm")) paintWorm(g, r, c, x, y, sw, sh);
         }
 
         if (r == hoverR && c == hoverC) {
@@ -389,6 +391,26 @@ public class GardenPanel extends ScreenPanel {
             g.drawPolygon(diamond(x, y, hw, hh));
             g.setStroke(new BasicStroke(1));
         }
+    }
+
+    /**
+     * A worm (assets/icons/worm.png) crawling back and forth across a plot that has Worm Fertilizer.
+     * Each plot's worm moves at its own pace; it turns around at the ends and stretches a little as it crawls.
+     */
+    private void paintWorm(Graphics2D g, int r, int c, double x, double y, double sw, double sh) {
+        BufferedImage worm = PixelArt.loadFile("icons", "worm");
+        if (worm == null) return;                                   // no picture: the coloured speckles are enough
+        double phase = time * 0.9 + r * 1.7 + c * 2.3;
+        double wx = x + Math.sin(phase) * sw * 0.25;                // left and right along the soil
+        boolean facingLeft = Math.cos(phase) < 0;                   // the way it is moving
+        double ww = sw * 0.82 * (1 + 0.06 * Math.sin(time * 7 + r + c));
+        double wh = sw * 0.82 * worm.getHeight() / worm.getWidth() * (1 - 0.06 * Math.sin(time * 7 + r + c));
+        double wy = y + sh * 0.22 - wh / 2;                         // on the front half of the soil, in front of the stem
+        Graphics2D w = (Graphics2D) g.create();
+        w.translate(wx, wy);
+        if (!facingLeft) w.scale(-1, 1);                            // the picture faces left; mirror it to face right
+        PixelArt.draw(w, worm, -ww / 2, 0, ww, wh);
+        w.dispose();
     }
 
     /** Small label above the hovered plot explaining its state and what a click will do. minY = bottom of the banner. */
