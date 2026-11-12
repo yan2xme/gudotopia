@@ -2,18 +2,14 @@ import java.awt.Color;
 import java.util.Random;
 
 /**
- * Flower rarity tiers.
- * DROP WEIGHTS ARE CONFIGURABLE HERE - they must add up to exactly 100 (percent).
- * The reward and default growth time of a tier are also set here.
+ * Flower rarity tiers: drop chance, sell price and growth time.
+ * The drop percentages must add up to exactly 100 (checked at start-up).
  */
 public enum Rarity {
     //          label        drop%  reward($) growth(s)  colour
-    COMMON(    "Common",     50,    5,        10,        new Color(0xB8B8B8)),
-    UNCOMMON(  "Uncommon",   25,    10,       14,        new Color(0x5CCB5F)),
-    RARE(      "Rare",       14,    20,       18,        new Color(0x4A9BF0)),
-    EPIC(      "Epic",       7,     40,       22,        new Color(0xB45CF0)),
-    LEGENDARY( "Legendary",  3,     75,       26,        new Color(0xFFB020)),
-    MYTHICAL(  "Mythical",   1,     150,      30,        new Color(0xFF4F8B));
+    COMMON(    "Common",     70,    5,        10,        new Color(0xB8B8B8)),
+    RARE(      "Rare",       25,    25,       18,        new Color(0x4A9BF0)),
+    LEGENDARY( "Legendary",  5,     100,      26,        new Color(0xFFB020));
 
     public final String label;
     public final int dropPercent;
@@ -29,7 +25,7 @@ public enum Rarity {
         this.color = color;
     }
 
-    /** Sanity check used at start-up: the drop table must total 100%. */
+    /** Start-up sanity check: the drop table must total 100%. */
     public static void validateDropTable() {
         int total = 0;
         for (Rarity r : values()) total += r.dropPercent;
@@ -38,8 +34,7 @@ public enum Rarity {
 
     /** Rolls a rarity tier using the drop table. */
     public static Rarity roll(Random rng) {
-        int n = rng.nextInt(100); // 0..99
-        int running = 0;
+        int n = rng.nextInt(100), running = 0;
         for (Rarity r : values()) {
             running += r.dropPercent;
             if (n < running) return r;

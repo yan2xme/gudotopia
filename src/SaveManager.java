@@ -85,7 +85,8 @@ public class SaveManager {
             try {
                 Properties p = readProps(getSaveFile(id));
                 String collection = p.getProperty("collection", "");
-                int discovered = collection.isBlank() ? 0 : collection.split(",").length;
+                int discovered = 0;                          // only flowers that still exist in the game
+                for (String fid : collection.split(",")) if (FlowerRegistry.byId(fid.trim()) != null) discovered++;
                 list.add(new SaveInfo(id, p.getProperty("name", "?"), num(p, "createdAt", 0), num(p, "lastPlayed", 0),
                         (int) num(p, "money", 0), (int) num(p, "gardenSize", PlayerData.START_SIZE), discovered));
             } catch (Exception e) {

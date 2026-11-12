@@ -11,16 +11,15 @@ import java.util.Map;
  * Images are drawn on tiny canvases with anti-aliasing OFF and scaled up with nearest-neighbour,
  * which gives the chunky pixel look.
  *
- * Classmate faces: if assets/faces/<flowerId>.png (or .jpg) exists it is used as the face,
- * otherwise a placeholder face is generated. A missing/broken image never crashes the game.
+ * Image files override the drawn art when present: assets/flowers/<flowerId>.png is a classmate's face
+ * (the petals are drawn around it; without a file a cute face is drawn), assets/icons/<name>.png replaces an icon.
+ * A missing/broken file never crashes the game.
  */
 public final class PixelArt {
     private static final Color DARK = new Color(0x2B1D1D);
     private static final Color G = new Color(0x4CAF50), GD = new Color(0x2E7D32), GL = new Color(0x81C784);
     private static final Map<String, BufferedImage> CACHE = new HashMap<>();
-    private static final Map<String, BufferedImage> FACES = new HashMap<>();
-    private static final String[] FACE_DIRS = { "assets/faces", "../assets/faces", "Gudotopia/assets/faces" };
-    private static final String[] EXTS = { ".png", ".jpg", ".jpeg" };
+    private static final Map<String, BufferedImage> FILES = new HashMap<>();   // loaded image files (null = not found)
 
     private PixelArt() {}
 
@@ -42,81 +41,135 @@ public final class PixelArt {
     private static void rect(Graphics2D g, Color c, int x, int y, int w, int h) { g.setColor(c); g.fillRect(x, y, w, h); }
     private static void oval(Graphics2D g, Color c, double x, double y, double w, double h) { g.setColor(c); g.fill(new Ellipse2D.Double(x, y, w, h)); }
 
-    // ------------------------------------------------------------------ classmate faces
-    /** Returns the real face image from assets/faces, or null when there is none. */
-    public static BufferedImage loadFace(Flower f) {
-        if (FACES.containsKey(f.id)) return FACES.get(f.id);
-        BufferedImage found = null;
-        outer:
-        for (String dir : FACE_DIRS)
-            for (String ext : EXTS) {
-                File file = new File(dir, f.id + ext);
-                if (file.isFile()) {
-                    try {
-                        found = ImageIO.read(file);
-                        if (found != null) break outer;
-                    } catch (Exception e) {
-                        System.err.println("Could not read face image " + file + ": " + e);
-                    }
-                }
-            }
-        FACES.put(f.id, found);
-        return found;
+    // ------------------------------------------------------------------ image files
+    /** Loads assets/<folder>/<name>.png once (cached). Returns null when the file is missing or broken. */
+    public static BufferedImage loadFile(String folder, String name) {
+        String key = folder + "/" + name;
+        if (FILES.containsKey(key)) return FILES.get(key);
+        BufferedImage img = null;
+        File file = new File("assets/" + folder, name + ".png");
+        if (file.isFile()) {
+            try { img = ImageIO.read(file); }
+            catch (Exception e) { System.err.println("Could not read image " + file + ": " + e); }
+        }
+        FILES.put(key, img);
+        return img;
     }
 
-    /** Flower head (petals + face), 24x24 pixels, or 96x96 when a real face image is used. */
+    /** An icon: assets/icons/<name>.png if the artist has supplied it, otherwise the drawn fallback. */
+    public static BufferedImage icon(String name, BufferedImage fallback) {
+        BufferedImage img = loadFile("icons", name);
+        return img != null ? img : fallback;
+    }
+
+    // ------------------------------------------------------------------ flower heads
+    /**
+     * Flower head = eight petals in the flower's colour around a face.
+     * The face is the classmate's picture from assets/flowers/<id>.png when that file exists (drawn at its own
+     * pixel size, so it stays crisp), otherwise the cute drawn face. Petals use the same 24-pixel design either way.
+     */
     public static BufferedImage head(Flower f) {
-        return cached("head_" + f.id, k -> renderHead(f));
+        return cached("head_" + f.id, k -> {
+            BufferedImage face = loadFile("flowers", f.id);
+            if (face == null) return petals(f, 1.0, null);
+            // scale the petal design so its centre disc (14 px in the design) wraps the face plus a 1 px rim
+            double k2 = (Math.max(face.getWidth(), face.getHeight()) + 2) / 14.0;
+            return petals(f, k2, face);
+        });
     }
 
-    private static BufferedImage renderHead(Flower f) {
-        BufferedImage face = loadFace(f);
-        int scale = face != null ? 4 : 1;
-        BufferedImage img = canvas(24 * scale, 24 * scale);
-        Graphics2D g = img.createGraphics();
-        g.scale(scale, scale);
-        Object aa = face != null ? RenderingHints.VALUE_ANTIALIAS_ON : RenderingHints.VALUE_ANTIALIAS_OFF;
-        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, aa);
-        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
-
-        // petals: dark outline first, then colour
-        for (int i = 0; i < 8; i++) {
-            double a = i * Math.PI / 4, cx = 12 + Math.cos(a) * 7.5, cy = 12 + Math.sin(a) * 7.5;
-            oval(g, DARK, cx - 4.5, cy - 4.5, 9, 9);
+    /**
+     * The petal design (8 petals on a ring of radius 7 around a centre disc of diameter 14) scaled by k.
+     * If a face picture is given it is drawn 1:1 in the centre, otherwise the drawn face (24x24 image, k = 1).
+     */
+    private static BufferedImage petals(Flower f, double k, BufferedImage face) {
+        int size = face == null ? 24 : (int) Math.ceil(23 * k);
+        BufferedImage img = canvas(size, size);
+        Graphics2D g = pixelG(img);
+        double c = size / 2.0;
+        for (int i = 0; i < 8; i++) {          // dark outline first, then colour
+            double a = i * Math.PI / 4, cx = c + Math.cos(a) * 7 * k, cy = c + Math.sin(a) * 7 * k;
+            oval(g, DARK, cx - 4.5 * k, cy - 4.5 * k, 9 * k, 9 * k);
         }
         for (int i = 0; i < 8; i++) {
-            double a = i * Math.PI / 4, cx = 12 + Math.cos(a) * 7.5, cy = 12 + Math.sin(a) * 7.5;
-            oval(g, i % 2 == 0 ? f.petalColor : f.petalColor.brighter(), cx - 3.5, cy - 3.5, 7, 7);
+            double a = i * Math.PI / 4, cx = c + Math.cos(a) * 7 * k, cy = c + Math.sin(a) * 7 * k;
+            oval(g, i % 2 == 0 ? f.petalColor : f.petalColor.brighter(), cx - 3.5 * k, cy - 3.5 * k, 7 * k, 7 * k);
         }
-        oval(g, DARK, 5, 5, 14, 14);
-
-        Shape faceShape = new Ellipse2D.Double(6, 6, 12, 12);
-        if (face != null) {
-            g.setClip(faceShape);
-            g.drawImage(face, 6, 6, 12, 12, null);
-            g.setClip(null);
-        } else {
-            oval(g, f.skin, 6, 6, 12, 12);
-            g.setClip(faceShape);
-            rect(g, f.hair, 5, 5, 14, 4);                         // hair on top
-            switch (f.hairStyle) {
-                case 0 -> { rect(g, f.hair, 6, 9, 3, 1); rect(g, f.hair, 15, 9, 3, 1); }
-                case 1 -> { rect(g, f.hair, 5, 8, 7, 2); rect(g, f.hair, 5, 9, 2, 4); }
-                case 2 -> { rect(g, f.hair, 5, 5, 3, 10); rect(g, f.hair, 16, 5, 3, 10); }
-                default -> { rect(g, f.hair, 5, 9, 2, 2); rect(g, f.hair, 17, 9, 2, 2); }
-            }
-            g.setClip(null);
-            if (f.hairStyle == 3) { rect(g, f.hair, 7, 4, 2, 2); rect(g, f.hair, 11, 3, 2, 3); rect(g, f.hair, 15, 4, 2, 2); }
-            rect(g, DARK, 9, 12, 1, 2);                            // eyes
-            rect(g, DARK, 14, 12, 1, 2);
-            rect(g, new Color(0xFF9A9A), 8, 15, 2, 1);             // cheeks
-            rect(g, new Color(0xFF9A9A), 14, 15, 2, 1);
-            rect(g, new Color(0xA83232), 10, 16, 1, 1);            // smile
-            rect(g, new Color(0xA83232), 11, 17, 2, 1);
-            rect(g, new Color(0xA83232), 13, 16, 1, 1);
-        }
+        oval(g, DARK, c - 7 * k, c - 7 * k, 14 * k, 14 * k);          // centre disc / rim around the face
+        if (face != null) g.drawImage(face, (int) Math.round(c - face.getWidth() / 2.0), (int) Math.round(c - face.getHeight() / 2.0), null);
+        else drawnFace(g, f);
         g.dispose();
         return img;
+    }
+
+    /** The cute face of a flower that has no picture, drawn in the middle of a 24x24 head: skin, hair, eyes, cheeks, smile. */
+    private static void drawnFace(Graphics2D g, Flower f) {
+        Shape circle = new Ellipse2D.Double(6, 6, 12, 12);
+        oval(g, f.skin, 6, 6, 12, 12);
+        g.setClip(circle);                                         // hair stays inside the round face
+        rect(g, f.hair, 5, 5, 14, 4);                              // hair on top
+        switch (f.hairStyle) {
+            case 0 -> { rect(g, f.hair, 6, 9, 3, 1); rect(g, f.hair, 15, 9, 3, 1); }     // short
+            case 1 -> { rect(g, f.hair, 5, 8, 7, 2); rect(g, f.hair, 5, 9, 2, 4); }      // side fringe
+            case 2 -> { rect(g, f.hair, 5, 5, 3, 10); rect(g, f.hair, 16, 5, 3, 10); }   // long
+            default -> { rect(g, f.hair, 5, 9, 2, 2); rect(g, f.hair, 17, 9, 2, 2); }    // spiky (spikes added below)
+        }
+        g.setClip(null);
+        if (f.hairStyle == 3) { rect(g, f.hair, 7, 4, 2, 2); rect(g, f.hair, 11, 3, 2, 3); rect(g, f.hair, 15, 4, 2, 2); }
+        rect(g, DARK, 9, 12, 1, 2);                                // eyes
+        rect(g, DARK, 14, 12, 1, 2);
+        rect(g, new Color(0xFF9A9A), 8, 15, 2, 1);                 // cheeks
+        rect(g, new Color(0xFF9A9A), 14, 15, 2, 1);
+        rect(g, new Color(0xA83232), 10, 16, 1, 1);                // smile
+        rect(g, new Color(0xA83232), 11, 17, 2, 1);
+        rect(g, new Color(0xA83232), 13, 16, 1, 1);
+    }
+
+    // ------------------------------------------------------------------ the garden block (grass on top, dirt sides)
+    /** Texture pixels per garden tile. The garden stretches these small textures onto the faces of the block. */
+    public static final int TEXELS = 8;
+    private static final int[] GRASS = { 0x5FAE4B, 0x5FAE4B, 0x6DBB57, 0x6DBB57, 0x539D42, 0x7CCB63, 0x4A8F3B };
+    private static final int[] DIRT = { 0x8A5A3B, 0x8A5A3B, 0x7A4D31, 0x7A4D31, 0x9B6A47, 0x6B4129, 0xA87852 };
+    private static final int STONE = 0x9A9A96;
+
+    /** A repeatable "random" number 0..n-1 for a pixel, so the texture looks noisy but never flickers. */
+    private static int noise(int x, int y, int n) {
+        int h = x * 374761393 + y * 668265263;
+        h = (h ^ (h >>> 13)) * 1274126177;
+        return Math.floorMod(h ^ (h >>> 16), n);
+    }
+
+    private static int shade(int rgb, double f) {
+        return 0xFF000000 | (int) ((rgb >> 16 & 255) * f) << 16 | (int) ((rgb >> 8 & 255) * f) << 8 | (int) ((rgb & 255) * f);
+    }
+
+    /** Top of an n x n garden block: speckled grass. */
+    public static BufferedImage grassTop(int n) {
+        return cached("grass_" + n, k -> {
+            int size = n * TEXELS;
+            BufferedImage img = canvas(size, size);
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++) img.setRGB(x, y, shade(GRASS[noise(x, y, GRASS.length)], 1.0));
+            return img;
+        });
+    }
+
+    /** One side of the block: speckled dirt with a few stones and grass hanging 1-3 pixels over the top edge. */
+    public static BufferedImage dirtSide(int n, boolean rightSide) {
+        return cached("dirt_" + n + rightSide, k -> {
+            int w = n * TEXELS, h = TEXELS, seed = rightSide ? 500 : 0;
+            double light = rightSide ? 0.72 : 0.92;                   // the right face is in shadow
+            BufferedImage img = canvas(w, h);
+            for (int x = 0; x < w; x++) {
+                int fringe = 1 + noise(x + seed, 99, 3);
+                for (int y = 0; y < h; y++) {
+                    int c = y < fringe ? GRASS[noise(x + seed, y, GRASS.length)]
+                          : noise(x + seed, y + 7, 23) == 0 ? STONE : DIRT[noise(x + seed, y, DIRT.length)];
+                    img.setRGB(x, y, shade(c, y == fringe ? light * 0.8 : light));   // thin shadow under the grass
+                }
+            }
+            return img;
+        });
     }
 
     // ------------------------------------------------------------------ plant stages (32x40, bottom-centre = base)
@@ -317,12 +370,15 @@ public final class PixelArt {
         });
     }
 
-    /** Draws an image scaled to w x h: crisp (nearest-neighbour) for pixel art, smooth for big photos. */
+    /**
+     * Draws an image scaled to w x h. Pixel art that is enlarged stays crisp (nearest-neighbour); an image that is
+     * shrunk, or a big photo, is smoothed instead (nearest-neighbour would drop rows of pixels when shrinking).
+     */
     public static void draw(Graphics2D g, Image img, double x, double y, double w, double h) {
         Object old = g.getRenderingHint(RenderingHints.KEY_INTERPOLATION);
-        boolean photo = img.getWidth(null) >= 64;
+        boolean smooth = img.getWidth(null) >= 200 || w < img.getWidth(null);
         g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
-                photo ? RenderingHints.VALUE_INTERPOLATION_BILINEAR : RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+                smooth ? RenderingHints.VALUE_INTERPOLATION_BILINEAR : RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
         g.drawImage(img, (int) Math.round(x), (int) Math.round(y), (int) Math.round(w), (int) Math.round(h), null);
         if (old != null) g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, old);
     }

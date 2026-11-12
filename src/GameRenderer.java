@@ -76,6 +76,19 @@ public final class GameRenderer {
         return size;
     }
 
+    /** Splits text into lines that are at most maxW pixels wide (breaks at spaces). */
+    public static java.util.List<String> wrap(String text, FontMetrics fm, int maxW) {
+        java.util.List<String> lines = new java.util.ArrayList<>();
+        String cur = "";
+        for (String word : text.split(" ")) {
+            String test = cur.isEmpty() ? word : cur + " " + word;
+            if (fm.stringWidth(test) > maxW && !cur.isEmpty()) { lines.add(cur); cur = word; }
+            else cur = test;
+        }
+        if (!cur.isEmpty()) lines.add(cur);
+        return lines;
+    }
+
     /** The big rainbow GUDOTOPIA title: each letter has a coloured fill, a white outline and a dark rim. */
     public static void title(Graphics2D g, String text, int cx, int baseline, float size, double t) {
         Color[] colors = { new Color(0xF0546A), new Color(0xF47A3A), new Color(0xF6AE2D), new Color(0xF2D93E),
@@ -228,8 +241,8 @@ public final class GameRenderer {
     }
 
     // ------------------------------------------------------------------ icons / HUD
-    public static void coin(Graphics2D g, int x, int y, int size) { PixelArt.draw(g, PixelArt.coin(), x, y, size, size); }
-    public static void seedBag(Graphics2D g, int x, int y, int size) { PixelArt.draw(g, PixelArt.seedBag(), x, y, size, size); }
+    public static void coin(Graphics2D g, int x, int y, int size) { PixelArt.draw(g, PixelArt.icon("coin", PixelArt.coin()), x, y, size, size); }
+    public static void seedBag(Graphics2D g, int x, int y, int size) { PixelArt.draw(g, PixelArt.icon("seed_bag", PixelArt.seedBag()), x, y, size, size); }
 
     // ------------------------------------------------------------------ plants
     /**
@@ -248,7 +261,8 @@ public final class GameRenderer {
         if (stage == 3) {
             double bob = Math.abs(Math.sin(t * 3 + f.id.hashCode())) * s * 2;
             // a dying flower droops and turns brown (the caller blinks `wilted` on and off as a warning)
-            PixelArt.draw(g, wilted ? PixelArt.wiltedHead(f) : PixelArt.head(f), x + 4 * s, wilted ? y + s * 1.5 : y - bob, 24 * s, 24 * s);
+            // the head is drawn big (38 px in the 32 px frame) so the classmates' faces are easy to see
+            PixelArt.draw(g, wilted ? PixelArt.wiltedHead(f) : PixelArt.head(f), x - 3 * s, wilted ? y - s * 5.5 : y - 7 * s - bob, 38 * s, 38 * s);
         }
     }
 

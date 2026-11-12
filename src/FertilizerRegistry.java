@@ -23,15 +23,15 @@ public final class FertilizerRegistry {
         // ---- configurable drop table: rarities that have no fertilizer yet stay at 0 ----
         for (Rarity r : Rarity.values()) DROP_PERCENT.put(r, 0);
         DROP_PERCENT.put(Rarity.COMMON, 70);
-        DROP_PERCENT.put(Rarity.UNCOMMON, 30);
+        DROP_PERCENT.put(Rarity.RARE, 30);
 
         // ---- the fertilizers (id, name, description, rarity, value $, growth bonus, colour) ----
         add(new Fertilizer("fert_worm", "Worm Fertilizer",
                 "Rich castings from hard-working worms. Plants grow 50% faster.",
-                Rarity.COMMON, 8, 0.50, new Color(0xE58AA0)));
+                Rarity.COMMON, 8, 0.50, new Color(0xA45EE5)));    // purple potion
         add(new Fertilizer("fert_manure", "Manure Fertilizer",
                 "Strong, stinky and very effective. Plants grow twice as fast.",
-                Rarity.UNCOMMON, 20, 1.00, new Color(0x7A4A25)));
+                Rarity.RARE, 20, 1.00, new Color(0xE53935)));     // red potion
 
         validate();
     }

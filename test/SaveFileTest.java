@@ -41,9 +41,9 @@ public class SaveFileTest {
         long[] clk = {System.currentTimeMillis() - 5_000};
         a.setClock(() -> clk[0]);
         a.setMoney(500); a.setGardenSize(4);
-        a.getSeeds().add("flower_03", 3); a.getSeeds().add("flower_18", 2);
+        a.getSeeds().add("daisy", 3); a.getSeeds().add("brent", 2);
         a.getFertilizers().add(FertilizerRegistry.byId("fert_worm")); a.getFertilizers().add(FertilizerRegistry.byId("fert_manure"));
-        a.unlock("flower_01"); a.unlock("flower_05");
+        a.unlock("tulip"); a.unlock("lily");
         a.water(0, 0);                                                    // watered, empty
         a.water(0, 1); a.applyFertilizer(0, 1, FertilizerRegistry.byId("fert_worm"));   // watered + fertilizer, empty
         a.water(1, 1); a.plant(1, 1);                                     // planted, growing
@@ -59,7 +59,7 @@ public class SaveFileTest {
         check(betaPlotsClean, "Beta's garden plots are all still dry and empty");
 
         // change Beta, then verify Alpha is unaffected
-        b2.setMoney(42); b2.getSeeds().add("flower_30", 1); b2.unlock("flower_30"); b2.water(2, 2);
+        b2.setMoney(42); b2.getSeeds().add("gudo", 1); b2.unlock("gudo"); b2.water(2, 2);
         sm.save(b2);
 
         // ============ "restart the application": brand-new SaveManager, then load ============
@@ -70,17 +70,17 @@ public class SaveFileTest {
         check(ia.money() == 500 && ia.gardenSize() == 4 && ia.discovered() == 2 && ia.lastPlayed() > 0, "list shows name/money/garden size/discovered/last played");
         PlayerData al = sm2.loadSave(a.getSaveId());
         check(al.getSaveName().equals("Alpha") && al.getMoney() == 500 && al.getGardenSize() == 4, "Alpha restored: name, money, garden size");
-        int sc = al.getSeeds().count(f("flower_03")) + al.getSeeds().count(f("flower_18"));
+        int sc = al.getSeeds().count(f("daisy")) + al.getSeeds().count(f("brent"));
         check(sc == 4, "Alpha restored: seed inventory (5 owned - 1 planted = 4)");
         check(al.getFertilizers().count(FertilizerRegistry.byId("fert_manure")) == 1 && al.getFertilizers().count(FertilizerRegistry.byId("fert_worm")) == 0, "Alpha restored: fertilizer inventory (worm used on plot, manure left)");
-        check(al.isUnlocked(f("flower_01")) && al.isUnlocked(f("flower_05")) && al.unlockedCount() == 2 && !al.isUnlocked(f("flower_30")), "Alpha restored: its own collection only");
+        check(al.isUnlocked(f("tulip")) && al.isUnlocked(f("lily")) && al.unlockedCount() == 2 && !al.isUnlocked(f("gudo")), "Alpha restored: its own collection only");
         check(al.getPlot(0, 0).isWatered() && al.getPlot(0, 0).isEmpty(), "watering status of an empty plot persists");
         check(al.getPlot(0, 1).isWatered() && al.getPlot(0, 1).getFertilizer() != null && al.getPlot(0, 1).getFertilizer().id.equals("fert_worm"), "fertilizer effect on an empty plot persists");
         check(!al.getPlot(1, 1).isEmpty() && al.getPlot(1, 1).getFlower().id.equals(plantedId) && al.getPlot(1, 1).isWatered(), "planted flower persists with watered soil");
         check(al.getPlot(1, 1).getGrowthMs() > 0, "growth progress persists");
         PlayerData bl = sm2.loadSave(b.getSaveId());
-        check(bl.getMoney() == 42 && bl.getSeeds().count(f("flower_30")) == 1 && bl.isUnlocked(f("flower_30")) && bl.getPlot(2, 2).isWatered(), "Beta restored its own changes");
-        check(bl.getFertilizers().total() == 0 && !bl.isUnlocked(f("flower_01")) && bl.getGardenSize() == 3, "Beta has none of Alpha's data");
+        check(bl.getMoney() == 42 && bl.getSeeds().count(f("gudo")) == 1 && bl.isUnlocked(f("gudo")) && bl.getPlot(2, 2).isWatered(), "Beta restored its own changes");
+        check(bl.getFertilizers().total() == 0 && !bl.isUnlocked(f("tulip")) && bl.getGardenSize() == 3, "Beta has none of Alpha's data");
 
         // ============ the file really is readable text ============
         var pa = props(sm2, a.getSaveId());
@@ -92,13 +92,13 @@ public class SaveFileTest {
         check(files(dir) == filesBefore && !Files.exists(sm2.getSaveFile(a.getSaveId()).resolveSibling("save_" + a.getSaveId() + ".properties.tmp")), "saving repeatedly rewrites the same file (no new files, no leftovers)");
         al.getSeeds().takeRandom(new Random()); sm2.save(al);          // inventory shrinks -> stored quantity must shrink too
         check(sm2.loadSave(a.getSaveId()).getSeeds().total() == 3, "using a seed lowers the stored quantity");
-        PlayerData emptied = sm2.loadSave(b.getSaveId()); emptied.getSeeds().take(f("flower_30")); sm2.save(emptied);
+        PlayerData emptied = sm2.loadSave(b.getSaveId()); emptied.getSeeds().take(f("gudo")); sm2.save(emptied);
         check(sm2.loadSave(b.getSaveId()).getSeeds().total() == 0, "using the last seed of a type removes it (quantity 0)");
 
         // ============ growth + death timing across a restart ============
         long now = System.currentTimeMillis();
         PlayerData t = sm2.createSave("Timing");
-        Flower fc = f("flower_03"); long grow = fc.growthMillis();      // Clover: 10 s to grow
+        Flower fc = f("daisy"); long grow = fc.growthMillis();      // Daisy: 10 s to grow
         // Build the game as it was 45 s ago, when it was saved and the app was closed:
         PlayerData tOld = new PlayerData(); tOld.setSaveInfo(t.getSaveId(), "Timing"); tOld.setMoney(t.getMoney());
         tOld.setClock(() -> now - 45_000);

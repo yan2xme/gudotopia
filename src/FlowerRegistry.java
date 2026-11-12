@@ -2,55 +2,45 @@ import java.awt.Color;
 import java.util.*;
 
 /**
- * The list of every flower in the game (30 total).
- * To rename a flower / change its description, edit the table in the static block below.
- * To give a flower a real classmate face, drop a PNG named after its id into assets/faces/ (see README).
+ * The list of every flower in the game (12 total: 5 Common, 4 Rare, 3 Legendary).
+ * To add or change a flower, edit the table below. A classmate's face goes in assets/flowers/<id>.png;
+ * the game draws the petals around it in the flower's colour. Flowers without a picture get a drawn face.
  */
 public final class FlowerRegistry {
-    public static final List<Flower> ALL = new ArrayList<>();
+    public static final List<Flower> ALL = List.of(
+        // id, name, description, rarity, petal colour, then the drawn face: skin, hair, hair style
+        flower("daisy",     "Daisy",        "A cheerful little white flower.",                                             Rarity.COMMON,    0xF4F4F4, 0xF5CBA7, 0x2B1B12, 1),
+        flower("tulip",     "Tulip",        "Cup-shaped and bright red.",                                                  Rarity.COMMON,    0xE84A5F, 0xE8B48A, 0x7A2E1D, 1),
+        flower("sunflower", "Sunflower",    "Always faces the sun.",                                                       Rarity.COMMON,    0xFFC93C, 0xFAD7B5, 0x8A5A2B, 2),
+        flower("rose",      "Rose",         "Classic, lovely, a little thorny.",                                           Rarity.COMMON,    0xC2185B, 0xD59A6A, 0x4A2C17, 3),
+        flower("lily",      "Lily",         "Soft pink petals and a sweet smell.",                                         Rarity.COMMON,    0xF8A5C2, 0xE8B48A, 0x2B1B12, 2),
+        flower("brent",     "Brentunia",    "Loud, proud and petunia-shaped. You will hear him before you see him.",       Rarity.RARE,      0xFF5FA2, 0xD59A6A, 0x1A1A1A, 0),
+        flower("rovid",     "Rovidendron",  "A rhododendron in a red bandana. Blooms only after coffee.",                  Rarity.RARE,      0x3EC9C0, 0xF5CBA7, 0x7A2E1D, 1),
+        flower("paolo",     "Paolotus",     "A lotus that is always mid-sentence. Floats past every deadline.",            Rarity.RARE,      0x9B6BFF, 0xE8B48A, 0x1A1A1A, 1),
+        flower("klent",     "Klentigold",   "A marigold with a villain smirk. Plotting something (a group project).",      Rarity.RARE,      0x7E3FF2, 0xD59A6A, 0x2B1B12, 3),
+        flower("aron",      "Aronchid",     "A legendary orchid: rare, refined and slightly unimpressed.",                 Rarity.LEGENDARY, 0x2ECC71, 0xF5CBA7, 0x2B1B12, 0),
+        flower("zeus",      "Zeusnia",      "A zinnia with thunderbolt glasses. Legend says he never misses a quiz.",      Rarity.LEGENDARY, 0x7FDBFF, 0xE8B48A, 0x1A1A1A, 2),
+        flower("gudo",      "Sir Gudahlia", "The legendary dahlia Gudotopia is named after. Grades your garden silently.", Rarity.LEGENDARY, 0xFFD700, 0xE8B48A, 0x2B1B12, 0)
+    );
     private static final Map<String, Flower> BY_ID = new HashMap<>();
 
     static {
         Rarity.validateDropTable();
-        // name, rarity  (ids are generated as flower_01 ... flower_30)
-        Object[][] table = {
-            {"Daisy", Rarity.COMMON}, {"Buttercup", Rarity.COMMON}, {"Clover", Rarity.COMMON},
-            {"Dandelion", Rarity.COMMON}, {"Pansy", Rarity.COMMON}, {"Marigold", Rarity.COMMON},
-            {"Petunia", Rarity.COMMON}, {"Poppy", Rarity.COMMON}, {"Violet", Rarity.COMMON},
-            {"Zinnia", Rarity.COMMON},
-            {"Tulip", Rarity.UNCOMMON}, {"Carnation", Rarity.UNCOMMON}, {"Sunflower", Rarity.UNCOMMON},
-            {"Lavender", Rarity.UNCOMMON}, {"Primrose", Rarity.UNCOMMON}, {"Cosmos", Rarity.UNCOMMON},
-            {"Snapdragon", Rarity.UNCOMMON},
-            {"Rose", Rarity.RARE}, {"Lily", Rarity.RARE}, {"Orchid", Rarity.RARE},
-            {"Iris", Rarity.RARE}, {"Peony", Rarity.RARE}, {"Hibiscus", Rarity.RARE},
-            {"Lotus", Rarity.EPIC}, {"Camellia", Rarity.EPIC}, {"Magnolia", Rarity.EPIC}, {"Dahlia", Rarity.EPIC},
-            {"Moonflower", Rarity.LEGENDARY}, {"Starbloom", Rarity.LEGENDARY},
-            {"Rainbow Bloom", Rarity.MYTHICAL},
-        };
-        Color[] skins = { new Color(0xF5CBA7), new Color(0xE8B48A), new Color(0xD59A6A), new Color(0xB67B4F), new Color(0xFAD7B5) };
-        Color[] hairs = { new Color(0x2B1B12), new Color(0x4A2C17), new Color(0x1A1A1A), new Color(0x8A5A2B),
-                          new Color(0xC9A227), new Color(0x7A2E1D) };
-        for (int i = 0; i < table.length; i++) {
-            Random rng = new Random(1000 + i * 77L);
-            String id = String.format("flower_%02d", i + 1);
-            Rarity rarity = (Rarity) table[i][1];
-            Color petal = Color.getHSBColor((i * 0.137f) % 1f, 0.55f + 0.3f * rng.nextFloat(), 0.95f);
-            String desc = "Classmate #" + (i + 1) + " in bloom. Put " + id + ".png in assets/faces/ to show their real face.";
-            Flower f = new Flower(id, (String) table[i][0], desc, rarity, petal,
-                    skins[rng.nextInt(skins.length)], hairs[rng.nextInt(hairs.length)], rng.nextInt(4));
-            ALL.add(f);
-            BY_ID.put(id, f);
-        }
+        for (Flower f : ALL) BY_ID.put(f.id, f);
+        for (Rarity r : Rarity.values())
+            if (ALL.stream().noneMatch(f -> f.rarity == r)) throw new IllegalStateException("No flower has rarity " + r);
     }
 
     private FlowerRegistry() {}
 
-    public static Flower byId(String id) { return BY_ID.get(id); }
+    /** Keeps the table above short: colours are written as 0xRRGGBB numbers. */
+    private static Flower flower(String id, String name, String description, Rarity rarity, int petal, int skin, int hair, int hairStyle) {
+        return new Flower(id, name, description, rarity, new Color(petal), new Color(skin), new Color(hair), hairStyle);
+    }
 
-    /**
-     * Random seed system: roll a rarity from the drop table, then pick one flower of that rarity.
-     * (A fixed-seed shop could later call byId() directly instead of this method.)
-     */
+    public static Flower byId(String id) { return id == null ? null : BY_ID.get(id); }
+
+    /** Random seed: roll a rarity from the drop table, then pick one flower of that rarity. */
     public static Flower randomSeed(Random rng) {
         Rarity rarity = Rarity.roll(rng);
         List<Flower> pool = new ArrayList<>();
