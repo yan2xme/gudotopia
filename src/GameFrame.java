@@ -78,6 +78,17 @@ public class GameFrame extends JFrame {
         startGame(saveManager.loadSave(saveId));
     }
 
+    /** DELETE: removes a save slot. If it is the garden that is open right now, that garden is closed first. */
+    public void deleteSave(long saveId) {
+        saveManager.deleteSave(saveId);
+        if (data != null && data.getSaveId() == saveId) {
+            root.remove(garden);
+            root.remove(collection);
+            garden = null; collection = null; data = null;
+            root.revalidate();
+        }
+    }
+
     /** Builds fresh garden + collection screens for this save, so nothing from another save can leak in. */
     private void startGame(PlayerData newData) {
         if (garden != null) root.remove(garden);

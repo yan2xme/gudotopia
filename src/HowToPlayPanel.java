@@ -11,7 +11,7 @@ public class HowToPlayPanel extends ScreenPanel {
         "GROW & DIE:  Flowers grow by themselves, even while you are on another screen or the game is closed. A fully grown flower must be HARVESTED within " + GameConfig.DEATH_MS / 1000 + " seconds or it dies and gives nothing! It droops and flashes when less than " + GameConfig.WARNING_MS / 1000 + " seconds are left.",
         "EARN MONEY:  Click a fully grown flower to harvest it and sell it (" + priceList() + "). The soil dries out again, so water it before the next seed. Spend money on seeds, fertilizer and LARGER PLOT.",
         "COLLECTION:  The first time you harvest a flower it is unlocked forever in FLOWERS. Flowers that died do not count.",
-        "SAVING:  The game saves automatically (and when you press SAVE or BACK). Every garden is its own save slot: NEW starts a fresh garden, LOAD continues one you made earlier.",
+        "SAVING:  The game saves automatically (and when you press SAVE or BACK). Every garden is its own save slot: NEW starts a fresh garden, LOAD continues one you made earlier (DELETE there removes a garden for good).",
         "SOUND:  Music and sound effects can be switched off with the SOUND button in the garden."
     };
 

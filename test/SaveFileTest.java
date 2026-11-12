@@ -140,6 +140,18 @@ public class SaveFileTest {
         check(Arrays.equals(Files.readAllBytes(badFile), garbage), "the damaged file is left untouched (never silently erased)");
         rmrf(badDir);
 
+        // ============ deleting a save ============
+        Path delDir = tempDir();
+        SaveManager ds = new SaveManager(delDir);
+        PlayerData keep = ds.createSave("Keep Me"), gone = ds.createSave("Delete Me");
+        ds.deleteSave(gone.getSaveId());
+        check(!Files.exists(ds.getSaveFile(gone.getSaveId())) && Files.exists(ds.getSaveFile(keep.getSaveId())), "delete removes only that save's file");
+        check(ds.listSaves().size() == 1 && ds.listSaves().get(0).name().equals("Keep Me"), "deleted save disappears from the LOAD list");
+        boolean delThrew = false; try { ds.deleteSave(gone.getSaveId()); } catch (SaveException e) { delThrew = true; }
+        check(delThrew, "deleting a save that no longer exists gives a clear error");
+        check(!ds.nameExists("Delete Me") && ds.createSave("Delete Me") != null, "the deleted name can be used again");
+        rmrf(delDir);
+
         rmrf(dir);
         System.out.println(fails == 0 ? "\nALL SAVE-FILE TESTS PASSED" : "\n" + fails + " TEST(S) FAILED");
         System.exit(fails == 0 ? 0 : 1);

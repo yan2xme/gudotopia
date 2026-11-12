@@ -13,7 +13,8 @@ public class LoadGamePanel extends ScreenPanel {
     private static final DateTimeFormatter WHEN = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.systemDefault());
 
     private final GameFrame frame;
-    private final PixelButton load, back;
+    private final PixelButton load, back, delete;
+    private long confirmUntil;              // DELETE asks "SURE?" first; a second click within 3 s really deletes
     private List<SaveInfo> saves = new ArrayList<>();
     private int selected = -1, hover = -1, scroll = 0;
     private String error = "";
@@ -22,13 +23,14 @@ public class LoadGamePanel extends ScreenPanel {
         this.frame = frame;
         load = new PixelButton("LOAD", this::loadSelected);
         back = new PixelButton("BACK", frame::showMenu);
-        add(load); add(back);
+        delete = new PixelButton("DELETE", this::deleteSelected);
+        add(load); add(back); add(delete);
         MouseAdapter m = new MouseAdapter() {
             @Override public void mouseMoved(MouseEvent e) { hover = rowAt(e.getX(), e.getY()); }
             @Override public void mouseExited(MouseEvent e) { hover = -1; }
             @Override public void mousePressed(MouseEvent e) {
                 int i = rowAt(e.getX(), e.getY());
-                if (i >= 0) { selected = i; if (e.getClickCount() >= 2) loadSelected(); }
+                if (i >= 0) { if (i != selected) confirmUntil = 0; selected = i; if (e.getClickCount() >= 2) loadSelected(); }
             }
             @Override public void mouseWheelMoved(MouseWheelEvent e) {
                 scroll = Math.max(0, Math.min(Math.max(0, saves.size() - visibleRows()), scroll + e.getWheelRotation()));
@@ -48,6 +50,25 @@ public class LoadGamePanel extends ScreenPanel {
         }
         selected = saves.isEmpty() ? -1 : 0;
         scroll = 0;
+        confirmUntil = 0;
+    }
+
+    /** First click arms the button ("SURE?"), the second click within 3 seconds deletes the selected save. */
+    private void deleteSelected() {
+        if (selected < 0 || selected >= saves.size()) return;
+        if (System.currentTimeMillis() > confirmUntil) {
+            confirmUntil = System.currentTimeMillis() + 3000;
+            AudioManager.getInstance().play("error");          // a warning sound: this cannot be undone
+            return;
+        }
+        confirmUntil = 0;
+        try {
+            frame.deleteSave(saves.get(selected).id());
+            AudioManager.getInstance().play("wither");
+            onShown();                                          // re-read the list
+        } catch (SaveException e) {
+            error = e.getMessage();
+        }
     }
 
     private void loadSelected() {
@@ -78,12 +99,18 @@ public class LoadGamePanel extends ScreenPanel {
     @Override public void doLayout() {
         int w = getWidth(), h = getHeight();
         back.setBounds(16, 16, (int) (w * 0.17) + 4, (int) (h * 0.10) + 4);
-        load.setBounds(w / 2 - (int) (w * 0.13), (int) (h * 0.85), (int) (w * 0.26) + 4, (int) (h * 0.11) + 4);
+        int bw = (int) (w * 0.22) + 4, bh = (int) (h * 0.11) + 4, gap = (int) (w * 0.03), by = (int) (h * 0.85);
+        load.setBounds(w / 2 - bw - gap / 2, by, bw, bh);
+        delete.setBounds(w / 2 + gap / 2, by, bw, bh);
     }
 
     @Override protected void paintScreen(Graphics2D g, int w, int h) {
         GameRenderer.hills(g, w, h);
         load.setEnabled(selected >= 0);
+        delete.setEnabled(selected >= 0);
+        boolean armed = System.currentTimeMillis() < confirmUntil;
+        delete.setLabel(armed ? "SURE? CLICK AGAIN" : "DELETE");
+        delete.setActive(armed);
         GameRenderer.text(g, "LOAD GAME", w / 2, (int) (h * 0.115), h * 0.07f, Color.WHITE, new Color(0x1F3D22), 0);
 
         if (saves.isEmpty()) {
@@ -118,6 +145,10 @@ public class LoadGamePanel extends ScreenPanel {
         }
         if (saves.size() > rows)
             GameRenderer.text(g, "scroll for more (" + saves.size() + " saves)", listX() + listW(), listY() + rows * (rowH() + rowGap()) + 14, h * 0.022f, Color.WHITE, GameRenderer.BLACK, 1);
+        if (armed && selected >= 0 && error.isEmpty())
+            GameRenderer.text(g, "Delete \"" + saves.get(selected).name() + "\" forever? Click again to confirm.", w / 2, (int) (h * 0.81),
+                    GameRenderer.fitSize(g, "Delete \"" + saves.get(selected).name() + "\" forever? Click again to confirm.", h * 0.03f, w - 40),
+                    new Color(0xC62828), Color.WHITE, 0);
         if (!error.isEmpty())
             GameRenderer.text(g, error, w / 2, (int) (h * 0.81), GameRenderer.fitSize(g, error, h * 0.03f, w - 40), new Color(0xC62828), Color.WHITE, 0);
     }
